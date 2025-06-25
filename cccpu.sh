@@ -2,10 +2,12 @@
 
 # #############################################################################
 #
-# SCRIPT 10.2 (FINAL THEME)
+# SCRIPT 11.0 (VISUAL CORE GRID)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Final cosmetic updates to the color theme and output.
+# - Replaces the online core list with a color-coded visual grid for
+#   interactive terminals.
+# - Retains plain text output for non-interactive sessions.
 #
 # #############################################################################
 
@@ -15,11 +17,8 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_TITLE='\e[1;38;5;228m'; C_HEADER='\e[1;38;5;39m'; C_CORE='\e[38;5;228m'
   C_STATUS_ON='\e[38;5;154m'; C_STATUS_OFF='\e[38;5;196m'; C_GOV='\e[38;5;141m'
   C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'; C_ERROR='\e[1;38;5;196m]'
-  # --- NEW All-Green Border Palette ---
-  C_PLUS='\e[38;5;47m';  # Medium Bright Green
-  C_PIPE='\e[38;5;41m';  # Lighter Green
-  C_DASH='\e[38;5;28m';  # Dark Green
-  C_EQUAL='\e[38;5;22m'; # Darkest Green
+  # All-Green Border Palette
+  C_PLUS='\e[38;5;47m'; C_PIPE='\e[38;5;41m'; C_DASH='\e[38;5;28m'; C_EQUAL='\e[38;5;22m'
 else
   for v in C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_PLUS C_PIPE C_DASH C_EQUAL; do eval "$v=''"; done
 fi
@@ -29,48 +28,31 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v10.2${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v11.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
-    echo
-    echo -e "${C_BOLD}USAGE:${C_RESET}"
-    echo -e "  $0 [action_flags]"
-    echo
-    echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
+    echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
+    echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
     echo -e "  ${C_SUCCESS}(no flags)${C_RESET}       Displays the current status of all cores (default)."
     echo -e "  ${C_SUCCESS}--on <cores>${C_RESET}     Enables specified cores."
     echo -e "  ${C_SUCCESS}--off <cores>${C_RESET}    Disables specified cores (cannot disable core 0)."
-    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor (e.g., performance)."
-    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias (e.g., balance_performance)."
+    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor."
+    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias."
     echo -e "  ${C_SUCCESS}--cores <cores>${C_RESET}   Specifies target cores for -g and -b flags. If omitted, they apply to all online cores."
     echo -e "  ${C_SUCCESS}-h, --help${C_RESET}        Shows this help message."
-    echo
-    echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"
-    echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"
+    echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"
 }
 
 function parse_core_list() {
     local input_str=$1; local expanded_list=""
-    if [[ "$input_str" == "all" ]]; then
-        expanded_list=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ' ')
-    else
-        for part in ${input_str//,/ }; do
-            if [[ $part == *-* ]]; then
-                local start=${part%-*}; local end=${part#*-}; for ((i=start; i<=end; i++)); do expanded_list="$expanded_list $i"; done
-            else
-                expanded_list="$expanded_list $part";
-            fi
-        done
-    fi
+    if [[ "$input_str" == "all" ]]; then expanded_list=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ' ');
+    else for part in ${input_str//,/ }; do if [[ $part == *-* ]]; then local start=${part%-*}; local end=${part#*-}; for ((i=start; i<=end; i++)); do expanded_list="$expanded_list $i"; done; else expanded_list="$expanded_list $part"; fi; done; fi
     echo "${expanded_list# }";
 }
 
-function get_enumerated_online_cpus() {
-    parse_core_list "$(cat /sys/devices/system/cpu/online)"
-}
+function get_enumerated_online_cpus() { parse_core_list "$(cat /sys/devices/system/cpu/online)"; }
 
 function set_core_state() {
-    local state=$1; local core_list=$2; local action_str="ONLINE"
-    if [ "$state" -eq 0 ]; then action_str="OFFLINE"; fi
+    local state=$1; local core_list=$2; local action_str="ONLINE"; if [ "$state" -eq 0 ]; then action_str="OFFLINE"; fi
     echo -e "${C_HEADER}Executing Core State Change: Setting cores to ${action_str}${C_RESET}"
     for i in $core_list; do
         if [ "$state" -eq 0 ] && [ "$i" -eq 0 ]; then echo -e "  ${C_INFO}↳ Skipping Core 0: Cannot be taken offline.${C_RESET}"; continue; fi
@@ -97,12 +79,38 @@ function apply_power_policies() {
     echo -e "${C_SUCCESS}>> Policy deployment complete.${C_RESET}\n"
 }
 
+# --- REFACTORED function to show online core status ---
 function show_online_cores() {
-    local online_cores
-    online_cores=$(get_enumerated_online_cpus)
-    # UPDATED: Removed color from title text, changed core color to lime green
-    echo "Verified online cores:"
-    echo -e "${C_STATUS_ON}${online_cores}${C_RESET}\n"
+    # If this is an interactive terminal, draw the color grid.
+    if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+        echo -e "${C_INFO}System Core Status Grid:${C_RESET}"
+        local all_cores
+        all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
+        # Get online cores once for efficiency, add spaces for easy `grep` like matching
+        local online_cores=" $(get_enumerated_online_cpus) "
+        local counter=0
+        local wrap_at=16 # Add a newline every 16 cores
+
+        for i in "${all_cores[@]}"; do
+            # Check if the current core number is in our list of online cores
+            if [[ $online_cores == *" $i "* ]]; then
+                printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"
+            else
+                printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"
+            fi
+            ((counter++))
+            # Wrap to the next line if we've hit our wrap limit
+            if (( counter % wrap_at == 0 )); then printf "\n"; fi
+        done
+        printf "\n\n" # Add final spacing before the table
+    else
+        # Otherwise, for files or pipes, print the clean text version.
+        local online_cores_text
+        online_cores_text=$(get_enumerated_online_cpus)
+        echo "Verified online cores:"
+        echo "${online_cores_text}"
+        echo ""
+    fi
 }
 
 function show_status_table() {
@@ -132,10 +140,7 @@ if [ -z "$1" ]; then
     show_status_table
     exit 0
 fi
-
-ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
-ACTION_TAKEN=0
-
+ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --on) ON_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
@@ -147,24 +152,11 @@ while [[ $# -gt 0 ]]; do
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
 done
-
-if [[ -n "$ON_CORES_STR" ]]; then
-    set_core_state 1 "$(parse_core_list "$ON_CORES_STR")"
-fi
-if [[ -n "$OFF_CORES_STR" ]]; then
-    set_core_state 0 "$(parse_core_list "$OFF_CORES_STR")"
-fi
+if [[ -n "$ON_CORES_STR" ]]; then set_core_state 1 "$(parse_core_list "$ON_CORES_STR")"; fi
+if [[ -n "$OFF_CORES_STR" ]]; then set_core_state 0 "$(parse_core_list "$OFF_CORES_STR")"; fi
 if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
-    TARGET_LIST=""
-    if [[ -n "$CORES_FOR_POLICY_STR" ]]; then
-        TARGET_LIST=$(parse_core_list "$CORES_FOR_POLICY_STR")
-    else
-        TARGET_LIST=$(get_enumerated_online_cpus)
-    fi
+    TARGET_LIST=""; if [[ -n "$CORES_FOR_POLICY_STR" ]]; then TARGET_LIST=$(parse_core_list "$CORES_FOR_POLICY_STR"); else TARGET_LIST=$(get_enumerated_online_cpus); fi
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
-
-if [ "$ACTION_TAKEN" -eq 1 ]; then
-    show_online_cores
-fi
+if [ "$ACTION_TAKEN" -eq 1 ]; then show_online_cores; fi
 show_status_table
