@@ -2,11 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 10.1 (FINAL)
+# SCRIPT 10.2 (FINAL THEME)
 #
-# A modular command-line utility to view and manage CPU core status,
-# scaling governors, and energy performance bias.
-# - Re-instates the "Verified online cores" summary string.
+# A modular command-line utility to view and manage CPU core status.
+# - Final cosmetic updates to the color theme and output.
 #
 # #############################################################################
 
@@ -16,7 +15,11 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_TITLE='\e[1;38;5;228m'; C_HEADER='\e[1;38;5;39m'; C_CORE='\e[38;5;228m'
   C_STATUS_ON='\e[38;5;154m'; C_STATUS_OFF='\e[38;5;196m'; C_GOV='\e[38;5;141m'
   C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'; C_ERROR='\e[1;38;5;196m]'
-  C_PLUS='\e[38;5;25m'; C_PIPE='\e[38;5;32m'; C_DASH='\e[38;5;28m'; C_EQUAL='\e[38;5;22m'
+  # --- NEW All-Green Border Palette ---
+  C_PLUS='\e[38;5;47m';  # Medium Bright Green
+  C_PIPE='\e[38;5;41m';  # Lighter Green
+  C_DASH='\e[38;5;28m';  # Dark Green
+  C_EQUAL='\e[38;5;22m'; # Darkest Green
 else
   for v in C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_PLUS C_PIPE C_DASH C_EQUAL; do eval "$v=''"; done
 fi
@@ -26,7 +29,7 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v10.1${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v10.2${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo
     echo -e "${C_BOLD}USAGE:${C_RESET}"
@@ -94,12 +97,12 @@ function apply_power_policies() {
     echo -e "${C_SUCCESS}>> Policy deployment complete.${C_RESET}\n"
 }
 
-# --- Re-added function to display the list of currently online cores ---
 function show_online_cores() {
     local online_cores
     online_cores=$(get_enumerated_online_cpus)
-    echo -e "${C_INFO}Verified online cores:${C_RESET}"
-    echo -e "${C_YELLOW}${online_cores}${C_RESET}\n"
+    # UPDATED: Removed color from title text, changed core color to lime green
+    echo "Verified online cores:"
+    echo -e "${C_STATUS_ON}${online_cores}${C_RESET}\n"
 }
 
 function show_status_table() {
@@ -124,43 +127,33 @@ function show_status_table() {
 # --- MAIN LOGIC ---
 # =============================================================================
 
-# Default action: If no arguments are given, show status and exit.
 if [ -z "$1" ]; then
     show_online_cores
     show_status_table
     exit 0
 fi
 
-# Initialize variables to hold actions
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
-ACTION_TAKEN=0 # A flag to track if we did anything
+ACTION_TAKEN=0
 
-# Parse all arguments in a loop
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --on) ON_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
         --off) OFF_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
         -g|--governor) GOVERNOR_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
         -b|--bias) BIAS_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
-        --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;; # No ACTION_TAKEN bump, it modifies other actions
+        --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
 done
 
-# --- Execute actions based on parsed arguments ---
-
-# 1. Turn cores ON
 if [[ -n "$ON_CORES_STR" ]]; then
     set_core_state 1 "$(parse_core_list "$ON_CORES_STR")"
 fi
-
-# 2. Turn cores OFF
 if [[ -n "$OFF_CORES_STR" ]]; then
     set_core_state 0 "$(parse_core_list "$OFF_CORES_STR")"
 fi
-
-# 3. Apply power policies
 if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
     TARGET_LIST=""
     if [[ -n "$CORES_FOR_POLICY_STR" ]]; then
@@ -171,7 +164,6 @@ if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
 
-# 4. Always show the final status
 if [ "$ACTION_TAKEN" -eq 1 ]; then
     show_online_cores
 fi
