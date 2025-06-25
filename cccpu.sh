@@ -2,10 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 11.1 (FINAL)
+# SCRIPT 12.0 (DEFAULT POLICIES)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Final cosmetic update: <no_signal> text is now colored red.
+# - Automatically applies a default bias policy when cores are enabled
+#   via the --on flag (can be overridden by explicit -g or -b flags).
 #
 # #############################################################################
 
@@ -15,7 +16,6 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_TITLE='\e[1;38;5;228m'; C_HEADER='\e[1;38;5;39m'; C_CORE='\e[38;5;228m'
   C_STATUS_ON='\e[38;5;154m'; C_STATUS_OFF='\e[38;5;196m'; C_GOV='\e[38;5;141m'
   C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'; C_ERROR='\e[1;38;5;196m]'
-  # All-Green Border Palette
   C_PLUS='\e[38;5;47m'; C_PIPE='\e[38;5;41m'; C_DASH='\e[38;5;28m'; C_EQUAL='\e[38;5;22m'
 else
   for v in C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_PLUS C_PIPE C_DASH C_EQUAL; do eval "$v=''"; done
@@ -26,16 +26,17 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v11.1${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v12.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
     echo -e "  ${C_SUCCESS}(no flags)${C_RESET}       Displays the current status of all cores (default)."
-    echo -e "  ${C_SUCCESS}--on <cores>${C_RESET}     Enables specified cores."
-    echo -e "  ${C_SUCCESS}--off <cores>${C_RESET}    Disables specified cores (cannot disable core 0)."
-    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor."
-    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias."
-    echo -e "  ${C_SUCCESS}--cores <cores>${C_RESET}   Specifies target cores for -g and -b flags. If omitted, they apply to all online cores."
+    echo -e "  ${C_SUCCESS}--on <cores>${C_RESET}     Enables specified cores and applies a default bias policy."
+    echo -e "                     (Cores 0-3 -> balance_performance, 4+ -> performance)"
+    echo -e "  ${C_SUCCESS}--off <cores>${C_RESET}    Disables specified cores."
+    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor. Overrides default policies."
+    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias. Overrides default policies."
+    echo -e "  ${C_SUCCESS}--cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
     echo -e "  ${C_SUCCESS}-h, --help${C_RESET}        Shows this help message."
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"
 }
@@ -61,9 +62,29 @@ function set_core_state() {
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
 
+# --- NEW Function to apply default policies to a list of cores ---
+function apply_default_policies() {
+    local core_list=$1
+    echo -e "${C_HEADER}Applying Default Bias Policies...${C_RESET}"
+    for i in $core_list; do
+        local bias_to_set=""
+        if [ "$i" -le 3 ]; then
+            bias_to_set="balance_performance"
+        else
+            bias_to_set="performance"
+        fi
+        local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+        if [ -w "$BIAS_PATH" ]; then
+            echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
+            echo "$bias_to_set" > "$BIAS_PATH"
+        fi
+    done
+    echo -e "${C_SUCCESS}>> Default policies applied.${C_RESET}\n"
+}
+
 function apply_power_policies() {
     local governor=$1; local bias=$2; local core_list=$3
-    echo -e "${C_HEADER}Deploying Power Management Policies...${C_RESET}"
+    echo -e "${C_HEADER}Deploying Custom Power Management Policies...${C_RESET}"
     for i in $core_list; do
         if [[ -n "$governor" ]]; then
             local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
@@ -74,24 +95,14 @@ function apply_power_policies() {
             if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi
         fi
     done
-    echo -e "${C_SUCCESS}>> Policy deployment complete.${C_RESET}\n"
+    echo -e "${C_SUCCESS}>> Custom policies deployed.${C_RESET}\n"
 }
 
 function show_online_cores() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-        echo -e "${C_INFO}System Core Status Grid:${C_RESET}"
-        local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
-        local online_cores=" $(get_enumerated_online_cpus) "; local counter=0; local wrap_at=16
-        for i in "${all_cores[@]}"; do
-            if [[ $online_cores == *" $i "* ]]; then printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i";
-            else printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"; fi
-            ((counter++)); if (( counter % wrap_at == 0 )); then printf "\n"; fi
-        done
-        printf "\n\n"
-    else
-        local online_cores_text; online_cores_text=$(get_enumerated_online_cpus)
-        echo "Verified online cores:"; echo "${online_cores_text}"; echo ""
-    fi
+        echo -e "${C_INFO}System Core Status Grid:${C_RESET}"; local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n)); local online_cores=" $(get_enumerated_online_cpus) "; local counter=0; local wrap_at=16
+        for i in "${all_cores[@]}"; do if [[ $online_cores == *" $i "* ]]; then printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"; else printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"; fi; ((counter++)); if (( counter % wrap_at == 0 )); then printf "\n"; fi; done; printf "\n\n"
+    else local online_cores_text; online_cores_text=$(get_enumerated_online_cpus); echo "Verified online cores:"; echo "${online_cores_text}"; echo ""; fi
 }
 
 function show_status_table() {
@@ -102,17 +113,13 @@ function show_status_table() {
     printf "${C_PIPE}| ${C_RESET}"; _print_centered "$COL1_W" "NODE" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL2_W" "STATUS" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL3_W" "GOVERNOR" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL4_W" "BIAS" "$C_HEADER"; printf "${C_PIPE} |\n"; _draw_line "$C_DASH" "-"
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
     for i in "${all_cores[@]}"; do
-        local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"
-        local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}" # Set default colors
+        local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"; local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}"
         local ONLINE_FILE="/sys/devices/system/cpu/cpu${i}/online"
         if [ "$i" -eq 0 ] || ( [ -f "$ONLINE_FILE" ] && [ "$(cat "$ONLINE_FILE")" -eq 1 ] ); then
-            ONLINE_STATUS="ONLINE"; STATUS_COLOR="${C_STATUS_ON}"
-            local GOV_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; local EPP_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+            ONLINE_STATUS="ONLINE"; STATUS_COLOR="${C_STATUS_ON}"; local GOV_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; local EPP_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
             if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi; if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
         fi
-        # UPDATED: Check for <no_signal> and change color if found
-        if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi
-        if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
+        if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
         printf "${C_PIPE}| ${C_CORE}%-*s ${C_PIPE}| ${STATUS_COLOR}%-*s ${C_PIPE}| ${GOV_COLOR}%-*s ${C_PIPE}| ${EPP_COLOR}%-*s ${C_PIPE}|\n" "$COL1_W" "Core $i" "$COL2_W" "$ONLINE_STATUS" "$COL3_W" "$GOV" "$COL4_W" "$EPP_VAL"
     done
     _draw_line "$C_EQUAL" "="; echo
@@ -135,11 +142,24 @@ while [[ $# -gt 0 ]]; do
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
 done
-if [[ -n "$ON_CORES_STR" ]]; then set_core_state 1 "$(parse_core_list "$ON_CORES_STR")"; fi
-if [[ -n "$OFF_CORES_STR" ]]; then set_core_state 0 "$(parse_core_list "$OFF_CORES_STR")"; fi
+
+if [[ -n "$ON_CORES_STR" ]]; then
+    cores_to_enable=$(parse_core_list "$ON_CORES_STR")
+    set_core_state 1 "$cores_to_enable"
+    # Apply default policies ONLY if no custom policy was specified
+    if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then
+        apply_default_policies "$cores_to_enable"
+    fi
+fi
+if [[ -n "$OFF_CORES_STR" ]]; then
+    set_core_state 0 "$(parse_core_list "$OFF_CORES_STR")"
+fi
 if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
-    TARGET_LIST=""; if [[ -n "$CORES_FOR_POLICY_STR" ]]; then TARGET_LIST=$(parse_core_list "$CORES_FOR_POLICY_STR"); else TARGET_LIST=$(get_enumerated_online_cpus); fi
+    TARGET_LIST=""
+    if [[ -n "$CORES_FOR_POLICY_STR" ]]; then TARGET_LIST=$(parse_core_list "$CORES_FOR_POLICY_STR");
+    else TARGET_LIST=$(get_enumerated_online_cpus); fi
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
+
 if [ "$ACTION_TAKEN" -eq 1 ]; then show_online_cores; fi
 show_status_table
