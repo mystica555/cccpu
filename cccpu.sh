@@ -2,12 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 11.0 (VISUAL CORE GRID)
+# SCRIPT 11.1 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Replaces the online core list with a color-coded visual grid for
-#   interactive terminals.
-# - Retains plain text output for non-interactive sessions.
+# - Final cosmetic update: <no_signal> text is now colored red.
 #
 # #############################################################################
 
@@ -28,7 +26,7 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v11.0${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v11.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -79,37 +77,20 @@ function apply_power_policies() {
     echo -e "${C_SUCCESS}>> Policy deployment complete.${C_RESET}\n"
 }
 
-# --- REFACTORED function to show online core status ---
 function show_online_cores() {
-    # If this is an interactive terminal, draw the color grid.
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
         echo -e "${C_INFO}System Core Status Grid:${C_RESET}"
-        local all_cores
-        all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
-        # Get online cores once for efficiency, add spaces for easy `grep` like matching
-        local online_cores=" $(get_enumerated_online_cpus) "
-        local counter=0
-        local wrap_at=16 # Add a newline every 16 cores
-
+        local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
+        local online_cores=" $(get_enumerated_online_cpus) "; local counter=0; local wrap_at=16
         for i in "${all_cores[@]}"; do
-            # Check if the current core number is in our list of online cores
-            if [[ $online_cores == *" $i "* ]]; then
-                printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"
-            else
-                printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"
-            fi
-            ((counter++))
-            # Wrap to the next line if we've hit our wrap limit
-            if (( counter % wrap_at == 0 )); then printf "\n"; fi
+            if [[ $online_cores == *" $i "* ]]; then printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i";
+            else printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"; fi
+            ((counter++)); if (( counter % wrap_at == 0 )); then printf "\n"; fi
         done
-        printf "\n\n" # Add final spacing before the table
+        printf "\n\n"
     else
-        # Otherwise, for files or pipes, print the clean text version.
-        local online_cores_text
-        online_cores_text=$(get_enumerated_online_cpus)
-        echo "Verified online cores:"
-        echo "${online_cores_text}"
-        echo ""
+        local online_cores_text; online_cores_text=$(get_enumerated_online_cpus)
+        echo "Verified online cores:"; echo "${online_cores_text}"; echo ""
     fi
 }
 
@@ -121,12 +102,18 @@ function show_status_table() {
     printf "${C_PIPE}| ${C_RESET}"; _print_centered "$COL1_W" "NODE" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL2_W" "STATUS" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL3_W" "GOVERNOR" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL4_W" "BIAS" "$C_HEADER"; printf "${C_PIPE} |\n"; _draw_line "$C_DASH" "-"
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
     for i in "${all_cores[@]}"; do
-        local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"; local ONLINE_FILE="/sys/devices/system/cpu/cpu${i}/online"
+        local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"
+        local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}" # Set default colors
+        local ONLINE_FILE="/sys/devices/system/cpu/cpu${i}/online"
         if [ "$i" -eq 0 ] || ( [ -f "$ONLINE_FILE" ] && [ "$(cat "$ONLINE_FILE")" -eq 1 ] ); then
-            ONLINE_STATUS="ONLINE"; STATUS_COLOR="${C_STATUS_ON}"; local GOV_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; local EPP_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+            ONLINE_STATUS="ONLINE"; STATUS_COLOR="${C_STATUS_ON}"
+            local GOV_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; local EPP_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
             if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi; if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
         fi
-        printf "${C_PIPE}| ${C_CORE}%-*s ${C_PIPE}| ${STATUS_COLOR}%-*s ${C_PIPE}| ${C_GOV}%-*s ${C_PIPE}| ${C_EPP}%-*s ${C_PIPE}|\n" "$COL1_W" "Core $i" "$COL2_W" "$ONLINE_STATUS" "$COL3_W" "$GOV" "$COL4_W" "$EPP_VAL"
+        # UPDATED: Check for <no_signal> and change color if found
+        if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi
+        if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
+        printf "${C_PIPE}| ${C_CORE}%-*s ${C_PIPE}| ${STATUS_COLOR}%-*s ${C_PIPE}| ${GOV_COLOR}%-*s ${C_PIPE}| ${EPP_COLOR}%-*s ${C_PIPE}|\n" "$COL1_W" "Core $i" "$COL2_W" "$ONLINE_STATUS" "$COL3_W" "$GOV" "$COL4_W" "$EPP_VAL"
     done
     _draw_line "$C_EQUAL" "="; echo
 }
@@ -135,11 +122,7 @@ function show_status_table() {
 # --- MAIN LOGIC ---
 # =============================================================================
 
-if [ -z "$1" ]; then
-    show_online_cores
-    show_status_table
-    exit 0
-fi
+if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
