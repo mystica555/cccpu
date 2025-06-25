@@ -2,10 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 10.0 (FULL CPU CONTROL UTILITY)
+# SCRIPT 10.1 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status,
 # scaling governors, and energy performance bias.
+# - Re-instates the "Verified online cores" summary string.
 #
 # #############################################################################
 
@@ -25,7 +26,7 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v10.0${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v10.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo
     echo -e "${C_BOLD}USAGE:${C_RESET}"
@@ -93,6 +94,14 @@ function apply_power_policies() {
     echo -e "${C_SUCCESS}>> Policy deployment complete.${C_RESET}\n"
 }
 
+# --- Re-added function to display the list of currently online cores ---
+function show_online_cores() {
+    local online_cores
+    online_cores=$(get_enumerated_online_cpus)
+    echo -e "${C_INFO}Verified online cores:${C_RESET}"
+    echo -e "${C_YELLOW}${online_cores}${C_RESET}\n"
+}
+
 function show_status_table() {
     local COL1_W=12 COL2_W=12 COL3_W=15 COL4_W=25; local TABLE_WIDTH=$((COL1_W + COL2_W + COL3_W + COL4_W + 13)); local TITLE="SYSTEM STATUS: ALL CORES"
     function _draw_line() { printf "${C_PLUS}+"; for ((i=1; i<TABLE_WIDTH-1; i++)); do printf "${1}%s" "$2"; done; printf "${C_PLUS}+\n${C_RESET}"; }
@@ -115,23 +124,25 @@ function show_status_table() {
 # --- MAIN LOGIC ---
 # =============================================================================
 
-# If no arguments are given, just show status and exit.
+# Default action: If no arguments are given, show status and exit.
 if [ -z "$1" ]; then
+    show_online_cores
     show_status_table
     exit 0
 fi
 
 # Initialize variables to hold actions
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
+ACTION_TAKEN=0 # A flag to track if we did anything
 
 # Parse all arguments in a loop
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --on) ON_CORES_STR="$2"; shift 2 ;;
-        --off) OFF_CORES_STR="$2"; shift 2 ;;
-        -g|--governor) GOVERNOR_TO_SET="$2"; shift 2 ;;
-        -b|--bias) BIAS_TO_SET="$2"; shift 2 ;;
-        --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
+        --on) ON_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
+        --off) OFF_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
+        -g|--governor) GOVERNOR_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
+        -b|--bias) BIAS_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
+        --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;; # No ACTION_TAKEN bump, it modifies other actions
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
@@ -153,14 +164,15 @@ fi
 if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
     TARGET_LIST=""
     if [[ -n "$CORES_FOR_POLICY_STR" ]]; then
-        # Use the list specified by the --cores flag
         TARGET_LIST=$(parse_core_list "$CORES_FOR_POLICY_STR")
     else
-        # Default to all currently online cores
         TARGET_LIST=$(get_enumerated_online_cpus)
     fi
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
 
-# 4. Always show the final status table
+# 4. Always show the final status
+if [ "$ACTION_TAKEN" -eq 1 ]; then
+    show_online_cores
+fi
 show_status_table
