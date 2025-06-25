@@ -2,11 +2,12 @@
 
 # #############################################################################
 #
-# SCRIPT 12.0 (DEFAULT POLICIES)
+# SCRIPT 12.1 (ARGUMENT DEFAULTS)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Automatically applies a default bias policy when cores are enabled
-#   via the --on flag (can be overridden by explicit -g or -b flags).
+# - The --on and --off flags now have smart defaults if no core
+#   list is provided.
+# - Argument parser is more robust.
 #
 # #############################################################################
 
@@ -26,16 +27,15 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v12.0${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v12.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
     echo -e "  ${C_SUCCESS}(no flags)${C_RESET}       Displays the current status of all cores (default)."
-    echo -e "  ${C_SUCCESS}--on <cores>${C_RESET}     Enables specified cores and applies a default bias policy."
-    echo -e "                     (Cores 0-3 -> balance_performance, 4+ -> performance)"
-    echo -e "  ${C_SUCCESS}--off <cores>${C_RESET}    Disables specified cores."
-    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor. Overrides default policies."
-    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias. Overrides default policies."
+    echo -e "  ${C_SUCCESS}--on [<cores>]${C_RESET}   Enables cores. Defaults to 'all' if no list is given."
+    echo -e "  ${C_SUCCESS}--off [<cores>]${C_RESET}  Disables cores. Defaults to all except core 0."
+    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor."
+    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias."
     echo -e "  ${C_SUCCESS}--cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
     echo -e "  ${C_SUCCESS}-h, --help${C_RESET}        Shows this help message."
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"
@@ -62,22 +62,13 @@ function set_core_state() {
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
 
-# --- NEW Function to apply default policies to a list of cores ---
 function apply_default_policies() {
     local core_list=$1
     echo -e "${C_HEADER}Applying Default Bias Policies...${C_RESET}"
     for i in $core_list; do
-        local bias_to_set=""
-        if [ "$i" -le 3 ]; then
-            bias_to_set="balance_performance"
-        else
-            bias_to_set="performance"
-        fi
+        local bias_to_set=""; if [ "$i" -le 3 ]; then bias_to_set="balance_performance"; else bias_to_set="performance"; fi
         local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
-        if [ -w "$BIAS_PATH" ]; then
-            echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
-            echo "$bias_to_set" > "$BIAS_PATH"
-        fi
+        if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"; echo "$bias_to_set" > "$BIAS_PATH"; fi
     done
     echo -e "${C_SUCCESS}>> Default policies applied.${C_RESET}\n"
 }
@@ -86,14 +77,8 @@ function apply_power_policies() {
     local governor=$1; local bias=$2; local core_list=$3
     echo -e "${C_HEADER}Deploying Custom Power Management Policies...${C_RESET}"
     for i in $core_list; do
-        if [[ -n "$governor" ]]; then
-            local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
-            if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi
-        fi
-        if [[ -n "$bias" ]]; then
-            local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
-            if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi
-        fi
+        if [[ -n "$governor" ]]; then local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi; fi
+        if [[ -n "$bias" ]]; then local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"; if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi; fi
     done
     echo -e "${C_SUCCESS}>> Custom policies deployed.${C_RESET}\n"
 }
@@ -131,10 +116,23 @@ function show_status_table() {
 
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --on) ON_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
-        --off) OFF_CORES_STR="$2"; ACTION_TAKEN=1; shift 2 ;;
+        --on)
+            ACTION_TAKEN=1
+            # Check if the next argument exists and is NOT a flag
+            if [[ -n "$2" && "$2" != -* ]]; then ON_CORES_STR="$2"; shift 2;
+            else ON_CORES_STR="all"; shift 1; fi # Use default
+            ;;
+        --off)
+            ACTION_TAKEN=1
+            if [[ -n "$2" && "$2" != -* ]]; then OFF_CORES_STR="$2"; shift 2;
+            else # Default to all cores except 0
+                OFF_CORES_STR=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ',')
+                shift 1
+            fi
+            ;;
         -g|--governor) GOVERNOR_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
         -b|--bias) BIAS_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
         --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
@@ -146,7 +144,6 @@ done
 if [[ -n "$ON_CORES_STR" ]]; then
     cores_to_enable=$(parse_core_list "$ON_CORES_STR")
     set_core_state 1 "$cores_to_enable"
-    # Apply default policies ONLY if no custom policy was specified
     if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then
         apply_default_policies "$cores_to_enable"
     fi
