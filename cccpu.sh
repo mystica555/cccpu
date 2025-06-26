@@ -2,11 +2,12 @@
 
 # #############################################################################
 #
-# SCRIPT 19.0 (LIST SUBCOMMANDS)
+# SCRIPT 19.1 (PARSER FIX)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Adds a 'list' subcommand to --governor and --bias to show available
-#   options on the system.
+# - Fixes a critical bug where the script would hang if -g or -b were
+#   provided without a value.
+# - The argument parser is now more robust and integrated.
 #
 # #############################################################################
 
@@ -38,7 +39,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -73,29 +74,12 @@ function set_core_state() {
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
 
-# --- NEW Function to list available policies ---
 function list_available_policies() {
-    local policy_type=$1
-    local file_path=""
-    local title=""
-
-    if [[ "$policy_type" == "governor" ]]; then
-        file_path="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
-        title="Available Governors"
-    elif [[ "$policy_type" == "bias" ]]; then
-        file_path="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences"
-        title="Available Bias Profiles"
-    else
-        return
-    fi
-    
+    local policy_type=$1; local file_path=""; local title=""
+    if [[ "$policy_type" == "governor" ]]; then file_path="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"; title="Available Governors";
+    elif [[ "$policy_type" == "bias" ]]; then file_path="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences"; title="Available Bias Profiles"; else return; fi
     echo -e "${C_HEADER}${title}:${C_RESET}"
-    if [ -f "$file_path" ]; then
-        echo -e "${C_YELLOW}$(cat "$file_path")${C_RESET}"
-    else
-        echo -e "${C_ERROR}  Information not available on this system.${C_RESET}"
-    fi
-    echo
+    if [ -f "$file_path" ]; then echo -e "${C_YELLOW}$(cat "$file_path")${C_RESET}"; else echo -e "${C_ERROR}  Information not available on this system.${C_RESET}"; fi; echo
 }
 
 function check_policy_availability() {
@@ -191,33 +175,40 @@ function show_status_table() {
 }
 
 # =============================================================================
-# --- MAIN LOGIC ---
+# --- MAIN LOGIC (REFACTORED PARSER) ---
 # =============================================================================
 
 echo # Start with a blank line for separation
-# Handle list commands first, as they are informational and should exit.
-for arg in "$@"; do
-    if [[ "$arg" == "list" ]]; then
-        if [[ "$prev_arg" == "-g" || "$prev_arg" == "--governor" ]]; then
-            list_available_policies "governor"
-            exit 0
-        elif [[ "$prev_arg" == "-b" || "$prev_arg" == "--bias" ]]; then
-            list_available_policies "bias"
-            exit 0
-        fi
-    fi
-    prev_arg="$arg"
-done
 
-if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
+# If no arguments are given, just show status and exit.
+if [ -z "$1" ]; then
+    show_online_cores
+    show_status_table
+    exit 0
+fi
+
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --on) ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then ON_CORES_STR="$2"; shift 2; else ON_CORES_STR="all"; shift 1; fi ;;
         --off) ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then OFF_CORES_STR="$2"; shift 2; else OFF_CORES_STR=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ','); shift 1; fi ;;
-        -g|--governor) GOVERNOR_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
-        -b|--bias) BIAS_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
-        -c|--cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
+        -g|--governor)
+            ACTION_TAKEN=1
+            if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'performance' or 'list').${C_RESET}"; show_help; exit 1; fi
+            if [[ "$2" == "list" ]]; then list_available_policies "governor"; exit 0; fi
+            GOVERNOR_TO_SET="$2"; shift 2
+            ;;
+        -b|--bias)
+            ACTION_TAKEN=1
+            if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'powersave' or 'list').${C_RESET}"; show_help; exit 1; fi
+            if [[ "$2" == "list" ]]; then list_available_policies "bias"; exit 0; fi
+            BIAS_TO_SET="$2"; shift 2
+            ;;
+        -c|--cores)
+            if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires a core specification.${C_RESET}"; show_help; exit 1; fi
+            CORES_FOR_POLICY_STR="$2"; shift 2
+            ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
