@@ -2,11 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 12.10 (FINAL)
+# SCRIPT 13.0 (THE FINAL CUT)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes missing pipe separators in the detailed status table.
-# - Fixes number alignment in the NODE column by left-aligning the text.
+# - The definitive version with ultimate "pedantic" formatting fixes for
+#   a pixel-perfect table layout.
 #
 # #############################################################################
 
@@ -39,7 +39,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.10${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v13.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -99,7 +99,7 @@ function show_online_cores() {
         local TITLE="CPU Core Status"
         draw_line "$C_EQUAL" "="
         local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
-        printf "${C_PIPE}|%*s${C_INFO}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
+        printf "${C_PIPE}|%*s${C_INFO}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
         local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
         local online_cores=" $(get_enumerated_online_cpus) "
@@ -117,25 +117,21 @@ function show_online_cores() {
 }
 
 function show_status_table() {
-    # Helper to print a centered string within a given cell width
+    # --- Custom Cell Formatters ---
     function _print_centered() { local width=$1 text=$2 color=$3; local pad_len=$(( (width - ${#text}) / 2 )); printf "${color}%*s%s%*s${C_RESET}" "$pad_len" "" "$text" "$((width - ${#text} - pad_len))"; }
-    # Helper to print a left-justified string within a given cell width, with padding
-    function _print_left() { local width=$1 text=$2 color=$3; printf "${color}   %-*s ${C_RESET}" "$((width-4))" "$text"; }
+    function _print_node() { local width=$1 text=$2 color=$3; local num=${text##* }; printf "${color}    Core %-*s${C_RESET}" "$((width-8))" "$num"; }
+    function _print_bias() { local width=$1 text=$2 color=$3; local longest="balance_performance"; local pad_len=$(( (width - ${#longest}) / 2 )); printf "%*s${color}%-*s${C_RESET}" "$pad_len" "" "$((width-pad_len))" "$text"; }
 
     local TITLE="Detailed Core Status"
     local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
-    draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_PIPE}|%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
+    draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
     draw_line "$C_EQUAL" "="
 
     # Print CENTERED table headers
-    printf "${C_PIPE}|"
-    _print_centered "$CELL1_W" "NODE" "$C_HEADER"
-    printf "${C_PIPE}|"
-    _print_centered "$CELL2_W" "STATUS" "$C_HEADER"
-    printf "${C_PIPE}|"
-    _print_centered "$CELL3_W" "GOVERNOR" "$C_HEADER"
-    printf "${C_PIPE}|"
-    _print_centered "$CELL4_W" "BIAS" "$C_HEADER"
+    printf "${C_PIPE}|"; _print_centered "$CELL1_W" "NODE" "$C_HEADER"
+    printf "${C_PIPE}|"; _print_centered "$CELL2_W" "STATUS" "$C_HEADER"
+    printf "${C_PIPE}|"; _print_centered "$CELL3_W" "GOVERNOR" "$C_HEADER"
+    printf "${C_PIPE}|"; _print_centered "$CELL4_W" "BIAS" "$C_HEADER"
     printf "${C_PIPE}|\n"
     draw_line "$C_DASH" "-"
 
@@ -149,15 +145,11 @@ function show_status_table() {
         fi
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
 
-        # Print data rows with new alignment
-        printf "${C_PIPE}|"
-        _print_left "$CELL1_W" "Core $i" "$C_CORE"      # Left-aligned for number consistency
-        printf "${C_PIPE}|"
-        _print_centered "$CELL2_W" "$ONLINE_STATUS" "$STATUS_COLOR"
-        printf "${C_PIPE}|"
-        _print_centered "$CELL3_W" "$GOV" "$GOV_COLOR"
-        printf "${C_PIPE}|"
-        _print_left "$CELL4_W" "$EPP_VAL" "$EPP_COLOR" # Left-aligned as requested
+        # Print data rows with new custom alignment
+        printf "${C_PIPE}|"; _print_node "$CELL1_W" "Core $i" "$C_CORE"
+        printf "${C_PIPE}|"; _print_centered "$CELL2_W" "$ONLINE_STATUS" "$STATUS_COLOR"
+        printf "${C_PIPE}|"; _print_centered "$CELL3_W" "$GOV" "$GOV_COLOR"
+        printf "${C_PIPE}|"; _print_bias "$CELL4_W" "$EPP_VAL" "$EPP_COLOR"
         printf "${C_PIPE}|\n"
     done
     draw_line "$C_EQUAL" "=";
