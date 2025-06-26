@@ -2,10 +2,12 @@
 
 # #############################################################################
 #
-# SCRIPT 16.6 (FINAL FINAL THEME)
+# SCRIPT 17.0 (LOGIC FIX)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Unifies header colors for a consistent theme.
+# - Adds logic to automatically switch governor from 'performance' to
+#   'powersave' when a non-performance bias is requested.
+# - Adds 'powersave' as the default governor when applying default policies.
 #
 # #############################################################################
 
@@ -37,7 +39,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.6${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v17.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -74,10 +76,21 @@ function set_core_state() {
 
 function apply_default_policies() {
     local core_list=$1
-    echo -e "${C_HEADER}Applying Default Bias Policies...${C_RESET}"
+    echo -e "${C_HEADER}Applying Default Policies...${C_RESET}"
     for i in $core_list; do
         local bias_to_set=""; if [ "$i" -le 3 ]; then bias_to_set="balance_performance"; else bias_to_set="performance"; fi
-        local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"; if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"; echo "$bias_to_set" > "$BIAS_PATH"; fi
+        local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
+        local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+        
+        # LOGIC FIX: Set Governor to powersave by default
+        if [ -w "$GOV_PATH" ]; then
+            echo -e "  ${C_INFO}↳ Core ${i}: Setting default governor to ${C_GOV}powersave${C_RESET}"
+            echo "powersave" > "$GOV_PATH"
+        fi
+        if [ -w "$BIAS_PATH" ]; then
+            echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
+            echo "$bias_to_set" > "$BIAS_PATH"
+        fi
     done
     echo -e "${C_SUCCESS}>> Default policies applied.${C_RESET}\n"
 }
@@ -86,8 +99,23 @@ function apply_power_policies() {
     local governor=$1; local bias=$2; local core_list=$3
     echo -e "${C_HEADER}Deploying Custom Power Management Policies...${C_RESET}"
     for i in $core_list; do
-        if [[ -n "$governor" ]]; then local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi; fi
-        if [[ -n "$bias" ]]; then local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"; if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi; fi
+        local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
+        local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+
+        # LOGIC FIX: If setting a non-performance bias, ensure governor is not performance.
+        if [[ -n "$bias" && "$bias" != "performance" ]]; then
+            if [ -f "$GOV_PATH" ] && [ "$(cat "$GOV_PATH")" == "performance" ]; then
+                echo -e "  ${C_INFO}↳ Core ${i}: Switching governor to 'powersave' to allow custom bias.${C_RESET}"
+                echo "powersave" > "$GOV_PATH"
+            fi
+        fi
+
+        if [[ -n "$governor" ]]; then
+            if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi
+        fi
+        if [[ -n "$bias" ]]; then
+            if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi
+        fi
     done
     echo -e "${C_SUCCESS}>> Custom policies deployed.${C_RESET}\n"
 }
@@ -189,7 +217,7 @@ while [[ $# -gt 0 ]]; do
         --off) ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then OFF_CORES_STR="$2"; shift 2; else OFF_CORES_STR=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ','); shift 1; fi ;;
         -g|--governor) GOVERNOR_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
         -b|--bias) BIAS_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
-        --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
+        -c|--cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
