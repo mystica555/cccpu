@@ -2,11 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 19.5 (SECURITY FIX)
+# SCRIPT 19.6 (SYNTAX FIX)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Re-implements a root check on all functions that modify system state,
-#   while allowing read-only operations for regular users.
+# - Fixes a critical syntax error in the argument parsing logic that could
+#   cause the script to fail.
 #
 # #############################################################################
 
@@ -38,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.5${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.6${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -208,13 +208,7 @@ function show_status_table() {
 
 echo # Start with a blank line for separation
 
-# If no arguments are given, just show status and exit.
-if [ -z "$1" ]; then
-    show_online_cores
-    show_status_table
-    exit 0
-fi
-
+if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
 ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0; LIST_GOV=0; LIST_BIAS=0
 
@@ -225,13 +219,13 @@ while [[ $# -gt 0 ]]; do
         -g|--governor)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'performance' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then LIST_GOV=1; shift 2; continue; fi
+            if [[ "$2" == "list" ]]; then LIST_GOV=1; shift 1; continue; fi # Use continue to allow chaining
             GOVERNOR_TO_SET="$2"; shift 2
             ;;
         -b|--bias)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'powersave' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then LIST_BIAS=1; shift 2; continue; fi
+            if [[ "$2" == "list" ]]; then LIST_BIAS=1; shift 1; continue; fi # Use continue to allow chaining
             BIAS_TO_SET="$2"; shift 2
             ;;
         -c|--cores)
@@ -245,14 +239,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Execute list actions if they were flagged
 if (( LIST_GOV == 1 )); then list_available_policies "governor"; fi
 if (( LIST_BIAS == 1 )); then list_available_policies "bias"; fi
-# Exit after listing if no other action was specified
-if (( (LIST_GOV == 1 || LIST_BIAS == 1) && ON_CORES_STR == "" && OFF_CORES_STR == "" && GOVERNOR_TO_SET == "" && BIAS_TO_SET == "" )); then
-    exit 0
-fi
-
 if [[ -n "$ON_CORES_STR" ]]; then
     cores_to_enable=$(parse_core_list "$ON_CORES_STR"); set_core_state 1 "$cores_to_enable"
     if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then apply_default_policies "$cores_to_enable"; fi
@@ -263,13 +251,13 @@ if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
 
-# Determine what to show
-if (( SHOW_GRID_FLAG == 0 && SHOW_TABLE_FLAG == 0 )); then
-    # Default behavior: show both if an action was taken, or if no action (already handled)
-    show_online_cores
-    show_status_table
-else
-    # Explicit show flags were used
-    if (( SHOW_GRID_FLAG == 1 )); then show_online_cores; fi
-    if (( SHOW_TABLE_FLAG == 1 )); then show_status_table; fi
+# Determine what to show if actions were taken
+if [ "$ACTION_TAKEN" -eq 1 ]; then
+    if (( SHOW_GRID_FLAG == 0 && SHOW_TABLE_FLAG == 0 )); then
+        show_online_cores
+        show_status_table
+    else
+        if (( SHOW_GRID_FLAG == 1 )); then show_online_cores; fi
+        if (( SHOW_TABLE_FLAG == 1 )); then show_status_table; fi
+    fi
 fi
