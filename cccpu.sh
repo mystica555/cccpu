@@ -2,11 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 16.2 (MOAR PIXEL PERFECT)
+# SCRIPT 16.3 (FINAL THEME)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Final, "bulletproof" refactoring of the status table's printf
-#   statement to guarantee column separators and alignment are perfect.
+# - Unifies header colors for a consistent theme.
 #
 # #############################################################################
 
@@ -38,7 +37,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.1${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.3${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -98,7 +97,7 @@ function show_online_cores() {
         local TITLE="CPU Core Status"
         draw_line "$C_EQUAL" "="
         local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
-        printf "${C_PIPE}|%*s${C_INFO}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
+        printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
         local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
         local online_cores=" $(get_enumerated_online_cpus) "
@@ -208,4 +207,3 @@ fi
 
 if [ "$ACTION_TAKEN" -eq 1 ]; then show_online_cores; fi
 show_status_table
-
