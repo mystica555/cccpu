@@ -2,13 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 12.9 (FINAL)
+# SCRIPT 12.10 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Final, major refactoring of the status table for perfect alignment:
-#   - Headers are centered within columns.
-#   - Data is centered, except for the Bias column which is left-aligned.
-#   - Titles and error messages are corrected.
+# - Fixes missing pipe separators in the detailed status table.
+# - Fixes number alignment in the NODE column by left-aligning the text.
 #
 # #############################################################################
 
@@ -41,7 +39,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.9${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.10${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -126,14 +124,19 @@ function show_status_table() {
 
     local TITLE="Detailed Core Status"
     local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
-    draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))"; draw_line "$C_EQUAL" "="
+    draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_PIPE}|%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
+    draw_line "$C_EQUAL" "="
 
     # Print CENTERED table headers
-    printf "${C_PIPE}"; _print_centered "$CELL1_W" "NODE" "$C_HEADER"
-    printf "${C_PIPE}"; _print_centered "$CELL2_W" "STATUS" "$C_HEADER"
-    printf "${C_PIPE}"; _print_centered "$CELL3_W" "GOVERNOR" "$C_HEADER"
-    printf "${C_PIPE}"; _print_centered "$CELL4_W" "BIAS" "$C_HEADER"
-    printf "${C_PIPE}\n"
+    printf "${C_PIPE}|"
+    _print_centered "$CELL1_W" "NODE" "$C_HEADER"
+    printf "${C_PIPE}|"
+    _print_centered "$CELL2_W" "STATUS" "$C_HEADER"
+    printf "${C_PIPE}|"
+    _print_centered "$CELL3_W" "GOVERNOR" "$C_HEADER"
+    printf "${C_PIPE}|"
+    _print_centered "$CELL4_W" "BIAS" "$C_HEADER"
+    printf "${C_PIPE}|\n"
     draw_line "$C_DASH" "-"
 
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
@@ -147,11 +150,15 @@ function show_status_table() {
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
 
         # Print data rows with new alignment
-        printf "${C_PIPE}"; _print_centered "$CELL1_W" "Core $i" "$C_CORE"
-        printf "${C_PIPE}"; _print_centered "$CELL2_W" "$ONLINE_STATUS" "$STATUS_COLOR"
-        printf "${C_PIPE}"; _print_centered "$CELL3_W" "$GOV" "$GOV_COLOR"
-        printf "${C_PIPE}"; _print_left "$CELL4_W" "$EPP_VAL" "$EPP_COLOR" # Left-aligned
-        printf "${C_PIPE}\n"
+        printf "${C_PIPE}|"
+        _print_left "$CELL1_W" "Core $i" "$C_CORE"      # Left-aligned for number consistency
+        printf "${C_PIPE}|"
+        _print_centered "$CELL2_W" "$ONLINE_STATUS" "$STATUS_COLOR"
+        printf "${C_PIPE}|"
+        _print_centered "$CELL3_W" "$GOV" "$GOV_COLOR"
+        printf "${C_PIPE}|"
+        _print_left "$CELL4_W" "$EPP_VAL" "$EPP_COLOR" # Left-aligned as requested
+        printf "${C_PIPE}|\n"
     done
     draw_line "$C_EQUAL" "=";
 }
