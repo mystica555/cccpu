@@ -2,10 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 12.7 (FINAL)
+# SCRIPT 12.8 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes the core status grid to display all cores on a single line.
+# - Final cosmetic updates to titles, table padding, and error message color.
 #
 # #############################################################################
 
@@ -14,7 +14,9 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET='\e[0m'; C_BOLD='\e[1m'
   C_TITLE='\e[1;38;5;228m'; C_HEADER='\e[1;38;5;39m'; C_CORE='\e[38;5;228m'
   C_STATUS_ON='\e[38;5;154m'; C_STATUS_OFF='\e[38;5;196m'; C_GOV='\e[38;5;141m'
-  C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'; C_ERROR='\e[1;38;5;196m]'
+  C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'
+  C_ERROR='\e[1;38;5;196m' # FIXED: Removed stray ']'
+  # All-Green Border Palette
   C_PLUS='\e[38;5;47m'; C_PIPE='\e[38;5;41m'; C_DASH='\e[38;5;28m'; C_EQUAL='\e[38;5;22m'
 else
   for v in C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_PLUS C_PIPE C_DASH C_EQUAL; do eval "$v=''"; done
@@ -26,7 +28,8 @@ fi
 
 # Define column widths and calculate total table width globally for reuse
 COL1_W=12; COL2_W=12; COL3_W=15; COL4_W=25
-TABLE_WIDTH=$((COL1_W + COL2_W + COL3_W + COL4_W + 13))
+# UPDATED: Added 12 to width for the new padding (3 spaces * 4 columns)
+TABLE_WIDTH=$((COL1_W + COL2_W + COL3_W + COL4_W + 13 + 12))
 
 # Helper function to draw a multi-colored line, now globally accessible
 function draw_line() {
@@ -38,7 +41,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.7${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.8${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -96,36 +99,20 @@ function apply_power_policies() {
 function show_online_cores() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
         draw_line "$C_EQUAL" "="
-        local TITLE="System Core Status Grid"
+        local TITLE="CPU Core Status" # UPDATED: Title
         local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
         printf "${C_PIPE}|%*s${C_INFO}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
-
         local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
         local online_cores=" $(get_enumerated_online_cpus) "
-
-        # Calculate the exact width of the entire grid line to center it
-        local item_width=5 # Each item is "■ 123" which is 5 characters wide
-        local grid_content=""
-        for i in "${all_cores[@]}"; do
-            if [[ $online_cores == *" $i "* ]]; then
-                grid_content+=$(printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i")
-            else
-                grid_content+=$(printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i")
-            fi
-        done
-        # The visible length of the grid content is the number of cores * item width
-        local grid_width=$(( ${#all_cores[@]} * item_width ))
+        local item_width=5; local grid_width=$(( ${#all_cores[@]} * item_width ))
         local grid_pad=$(( (TABLE_WIDTH - 2 - grid_width) / 2 ))
-
-        # Print the centered grid on a single line
-        printf "${C_PIPE}|%*s" "$grid_pad" "" # Left pipe and padding
-        printf "%b" "$grid_content" # The grid itself
-        printf "%*s${C_PIPE}|\n" "$((TABLE_WIDTH - 2 - grid_width - grid_pad))" "" # Right padding and pipe
-
+        printf "${C_PIPE}|%*s" "$grid_pad" ""
+        local grid_content=""; for i in "${all_cores[@]}"; do if [[ $online_cores == *" $i "* ]]; then grid_content+=$(printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"); else grid_content+=$(printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"); fi; done
+        printf "%b" "$grid_content"
+        printf "%*s${C_PIPE}|\n" "$((TABLE_WIDTH - 2 - grid_width - grid_pad))" ""
         draw_line "$C_EQUAL" "="; echo ""
     else
-        # Fallback for non-interactive terminals
         local online_cores_text; online_cores_text=$(get_enumerated_online_cpus)
         echo "Verified online cores:"; echo "${online_cores_text}"; echo ""
     fi
@@ -133,9 +120,15 @@ function show_online_cores() {
 
 function show_status_table() {
     function _print_centered() { local width=$1 text=$2 color=$3; local pad_len=$(( (width - ${#text}) / 2 )); printf "${color}%*s%s%*s${C_RESET}" "$pad_len" "" "$text" "$((width - ${#text} - pad_len))" ""; }
-    local TITLE="SYSTEM STATUS: ALL CORES"; local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
+    local TITLE="Detailed Core Status" # UPDATED: Title
+    local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
     draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))"; draw_line "$C_EQUAL" "="
-    printf "${C_PIPE}| ${C_RESET}"; _print_centered "$COL1_W" "NODE" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL2_W" "STATUS" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL3_W" "GOVERNOR" "$C_HEADER"; printf "${C_PIPE} | ${C_RESET}"; _print_centered "$COL4_W" "BIAS" "$C_HEADER"; printf "${C_PIPE} |\n"; draw_line "$C_DASH" "-"
+    # UPDATED: Added 3 spaces of padding to each header column
+    printf "${C_PIPE}|    ${C_RESET}"; _print_centered "$COL1_W" "NODE" "$C_HEADER"
+    printf "${C_PIPE} |    ${C_RESET}"; _print_centered "$COL2_W" "STATUS" "$C_HEADER"
+    printf "${C_PIPE} |    ${C_RESET}"; _print_centered "$COL3_W" "GOVERNOR" "$C_HEADER"
+    printf "${C_PIPE} |    ${C_RESET}"; _print_centered "$COL4_W" "BIAS" "$C_HEADER"
+    printf "${C_PIPE} |\n"; draw_line "$C_DASH" "-"
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
     for i in "${all_cores[@]}"; do
         local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"; local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}"
@@ -145,7 +138,8 @@ function show_status_table() {
             if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi; if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
         fi
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
-        printf "${C_PIPE}| ${C_CORE}%-*s ${C_PIPE}| ${STATUS_COLOR}%-*s ${C_PIPE}| ${GOV_COLOR}%-*s ${C_PIPE}| ${EPP_COLOR}%-*s ${C_PIPE}|\n" "$COL1_W" "Core $i" "$COL2_W" "$ONLINE_STATUS" "$COL3_W" "$GOV" "$COL4_W" "$EPP_VAL"
+        # UPDATED: Added 3 spaces of padding to each data cell
+        printf "${C_PIPE}|    ${C_CORE}%-*s ${C_PIPE}|    ${STATUS_COLOR}%-*s ${C_PIPE}|    ${GOV_COLOR}%-*s ${C_PIPE}|    ${EPP_COLOR}%-*s ${C_PIPE}|\n" "$COL1_W" "Core $i" "$COL2_W" "$ONLINE_STATUS" "$COL3_W" "$GOV" "$COL4_W" "$EPP_VAL"
     done
     draw_line "$C_EQUAL" "=";
 }
