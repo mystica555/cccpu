@@ -2,10 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 16.5 (USER FINAL)
+# SCRIPT 16.6 (FINAL FINAL THEME)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Final user-provided version with all formatting corrections.
+# - Unifies header colors for a consistent theme.
 #
 # #############################################################################
 
@@ -37,7 +37,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.5${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.6${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -96,13 +96,13 @@ function show_online_cores() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
         local TITLE="CPU Core Status"
         draw_line "$C_EQUAL" "="
-        local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
-        printf "${C_PIPE}|%*s${C_INFO}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
+        local PAD_LEN=$(( (TABLE_WIDTH - ${#TITLE}) / 2 ))
+        printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
         local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
         local online_cores=" $(get_enumerated_online_cpus) "
         local item_width=5; local grid_width=$(( ${#all_cores[@]} * item_width ))
-        local grid_pad=$(( (TABLE_WIDTH - 2 - grid_width) / 2 ))
+        local grid_pad=$(( (TABLE_WIDTH - grid_width) / 2 ))
         printf "${C_PIPE}|%*s" "$grid_pad" ""
         local grid_content=""; for i in "${all_cores[@]}"; do if [[ $online_cores == *" $i "* ]]; then grid_content+=$(printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"); else grid_content+=$(printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"); fi; done
         printf "%b" "$grid_content"
