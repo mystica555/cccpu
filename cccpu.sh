@@ -2,11 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 13.0 (THE FINAL CUT)
+# SCRIPT 13.1 (THE FINAL CUT)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - The definitive version with ultimate "pedantic" formatting fixes for
-#   a pixel-perfect table layout.
+# - Final, major refactoring of the status table for pixel-perfect alignment.
 #
 # #############################################################################
 
@@ -25,9 +24,10 @@ fi
 # --- GLOBAL HELPERS & DEFINITIONS ---
 # =============================================================================
 
-# Define CELL widths, including padding, for a consistent table structure
-CELL1_W=16; CELL2_W=16; CELL3_W=20; CELL4_W=30
-TABLE_WIDTH=$((CELL1_W + CELL2_W + CELL3_W + CELL4_W + 5)) # 5 for the pipes
+# Define INTERNAL CELL widths (space for text), padding is handled by printf
+CELL1_W=12; CELL2_W=12; CELL3_W=17; CELL4_W=27
+# Total width = sum of cell widths + padding (3 per cell * 4) + pipes (5)
+TABLE_WIDTH=$((CELL1_W + CELL2_W + CELL3_W + CELL4_W + 12 + 5))
 
 # Helper function to draw a multi-colored line, now globally accessible
 function draw_line() {
@@ -39,7 +39,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v13.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v13.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -117,22 +117,19 @@ function show_online_cores() {
 }
 
 function show_status_table() {
-    # --- Custom Cell Formatters ---
-    function _print_centered() { local width=$1 text=$2 color=$3; local pad_len=$(( (width - ${#text}) / 2 )); printf "${color}%*s%s%*s${C_RESET}" "$pad_len" "" "$text" "$((width - ${#text} - pad_len))"; }
-    function _print_node() { local width=$1 text=$2 color=$3; local num=${text##* }; printf "${color}    Core %-*s${C_RESET}" "$((width-8))" "$num"; }
-    function _print_bias() { local width=$1 text=$2 color=$3; local longest="balance_performance"; local pad_len=$(( (width - ${#longest}) / 2 )); printf "%*s${color}%-*s${C_RESET}" "$pad_len" "" "$((width-pad_len))" "$text"; }
+    # --- Centered Header Strings ---
+    local h_node; h_node=$(printf "%*sNODE%*s" $(( (CELL1_W - 4) / 2 )) "" $(( (CELL1_W - 4 + 1) / 2 )) "" )
+    local h_status; h_status=$(printf "%*sSTATUS%*s" $(( (CELL2_W - 6) / 2 )) "" $(( (CELL2_W - 6 + 1) / 2 )) "" )
+    local h_gov; h_gov=$(printf "%*sGOVERNOR%*s" $(( (CELL3_W - 8) / 2 )) "" $(( (CELL3_W - 8 + 1) / 2 )) "" )
+    local h_bias; h_bias=$(printf "%*sBIAS%*s" $(( (CELL4_W - 4) / 2 )) "" $(( (CELL4_W - 4 + 1) / 2 )) "" )
 
     local TITLE="Detailed Core Status"
     local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
     draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
     draw_line "$C_EQUAL" "="
 
-    # Print CENTERED table headers
-    printf "${C_PIPE}|"; _print_centered "$CELL1_W" "NODE" "$C_HEADER"
-    printf "${C_PIPE}|"; _print_centered "$CELL2_W" "STATUS" "$C_HEADER"
-    printf "${C_PIPE}|"; _print_centered "$CELL3_W" "GOVERNOR" "$C_HEADER"
-    printf "${C_PIPE}|"; _print_centered "$CELL4_W" "BIAS" "$C_HEADER"
-    printf "${C_PIPE}|\n"
+    # Print headers in one go for perfect alignment
+    printf "${C_PIPE}| ${C_HEADER}%s ${C_PIPE}| ${C_HEADER}%s ${C_PIPE}| ${C_HEADER}%s ${C_PIPE}| ${C_HEADER}%s ${C_PIPE}|\n" "$h_node" "$h_status" "$h_gov" "$h_bias"
     draw_line "$C_DASH" "-"
 
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
@@ -145,15 +142,23 @@ function show_status_table() {
         fi
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
 
-        # Print data rows with new custom alignment
-        printf "${C_PIPE}|"; _print_node "$CELL1_W" "Core $i" "$C_CORE"
-        printf "${C_PIPE}|"; _print_centered "$CELL2_W" "$ONLINE_STATUS" "$STATUS_COLOR"
-        printf "${C_PIPE}|"; _print_centered "$CELL3_W" "$GOV" "$GOV_COLOR"
-        printf "${C_PIPE}|"; _print_bias "$CELL4_W" "$EPP_VAL" "$EPP_COLOR"
-        printf "${C_PIPE}|\n"
+        # --- Formatted Data Strings ---
+        local d_node; d_node=$(printf "   Core %s" "$i")
+        local d_status; d_status=$(printf "%*s%s%*s" $(( (CELL2_W - ${#ONLINE_STATUS}) / 2 )) "" "$ONLINE_STATUS" $(( (CELL2_W - ${#ONLINE_STATUS} + 1) / 2 )) "" )
+        local d_gov; d_gov=$(printf "%*s%s%*s" $(( (CELL3_W - ${#GOV}) / 2 )) "" "$GOV" $(( (CELL3_W - ${#GOV} + 1) / 2 )) "" )
+        local longest_bias="balance_performance"; local bias_pad=$(( (CELL4_W - ${#longest_bias}) / 2 ))
+        local d_bias; d_bias=$(printf "%*s%s" "$bias_pad" "" "$EPP_VAL" )
+
+        # Print data row in one go for perfect alignment
+        printf "${C_PIPE}| ${C_CORE}%-*s ${C_PIPE}| ${STATUS_COLOR}%s ${C_PIPE}| ${GOV_COLOR}%s ${C_PIPE}| ${EPP_COLOR}%-*s ${C_PIPE}|\n" \
+            "$CELL1_W" "$d_node" \
+            "$d_status" \
+            "$d_gov" \
+            "$CELL4_W" "$d_bias"
     done
     draw_line "$C_EQUAL" "=";
 }
+
 
 # =============================================================================
 # --- MAIN LOGIC ---
