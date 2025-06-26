@@ -2,10 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 14.0 (PIXEL PERFECT EDITION)
+# SCRIPT 14.1 (THE FINAL CUT)
 #
-# The definitive version with a complete refactoring of the status table
-# to exactly match the user-provided visual mock-up for perfect alignment.
+# A modular command-line utility to view and manage CPU core status.
+# - Final, "bulletproof" refactoring of the status table's printf
+#   statement to guarantee column separators are always displayed correctly.
 #
 # #############################################################################
 
@@ -27,7 +28,7 @@ fi
 # Define EXACT table width from mock-up
 TABLE_WIDTH=68
 
-# Helper function to draw a multi-colored line, now globally accessible
+# Helper function to draw a multi-colored line
 function draw_line() {
     printf "${C_PLUS}+"; for ((i=1; i<TABLE_WIDTH-1; i++)); do printf "${1}%s" "$2"; done; printf "${C_PLUS}+\n${C_RESET}";
 }
@@ -37,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v14.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v14.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -115,13 +116,11 @@ function show_online_cores() {
 }
 
 function show_status_table() {
-    # --- Define exact cell widths based on mock-up ---
+    # --- Define exact cell INNER widths from mock-up ---
     local CELL1_W=10; local CELL2_W=10; local CELL3_W=13; local CELL4_W=27
 
-    # --- Formatting helper functions ---
-    # Returns a string centered within a given width
+    # --- Formatting helper functions (return strings, don't print) ---
     function _get_centered() { local width=$1; local text=$2; local pad=$(( (width - ${#text}) / 2 )); printf "%*s%s%*s" "$pad" "" "$text" "$((width - ${#text} - pad))"; }
-    # Returns a string for the BIAS column with special alignment
     function _get_bias() { local width=$1; local text=$2; local longest="balance_performance"; local pad=$(( (width - ${#longest}) / 2 )); printf "%*s%-*s" "$pad" "" "$((width-pad))" "$text"; }
 
     local TITLE="Detailed Core Status"
@@ -148,7 +147,7 @@ function show_status_table() {
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
 
         # --- Pre-format data strings for perfect alignment ---
-        local d_node;   d_node=$(printf "  Core %-s" "$i") # Custom padding for this column
+        local d_node;   d_node=$(printf " Core %-s" "$i")
         local d_status; d_status=$(_get_centered "$CELL2_W" "$ONLINE_STATUS")
         local d_gov;    d_gov=$(_get_centered "$CELL3_W" "$GOV")
         local d_bias;   d_bias=$(_get_bias "$CELL4_W" "$EPP_VAL")
