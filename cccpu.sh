@@ -2,12 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 17.0 (LOGIC FIX)
+# SCRIPT 18.0 (DYNAMIC ERROR HANDLING)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Adds logic to automatically switch governor from 'performance' to
-#   'powersave' when a non-performance bias is requested.
-# - Adds 'powersave' as the default governor when applying default policies.
+# - Adds dynamic error handling to verify that a requested governor or bias
+#   is available on the system before attempting to apply it.
 #
 # #############################################################################
 
@@ -39,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v17.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v18.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -74,22 +73,52 @@ function set_core_state() {
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
 
+# --- NEW Function to check if a policy is available for a given core ---
+function check_policy_availability() {
+    local core_num=$1
+    local policy_type=$2 # "governor" or "bias"
+    local policy_value=$3
+    local available_path=""
+    local valid=0
+
+    if [[ "$policy_type" == "governor" ]]; then
+        available_path="/sys/devices/system/cpu/cpu${core_num}/cpufreq/scaling_available_governors"
+    elif [[ "$policy_type" == "bias" ]]; then
+        available_path="/sys/devices/system/cpu/cpu${core_num}/cpufreq/energy_performance_available_preferences"
+    fi
+
+    if [ -f "$available_path" ]; then
+        if grep -q "\<$policy_value\>" "$available_path"; then
+            valid=1
+        fi
+    fi
+
+    if [ "$valid" -eq 0 ]; then
+        echo -e "  ${C_ERROR}Error: Policy '${policy_type}' value '${policy_value}' is not available for Core ${core_num}.${C_RESET}"
+        return 1
+    fi
+    return 0
+}
+
 function apply_default_policies() {
     local core_list=$1
     echo -e "${C_HEADER}Applying Default Policies...${C_RESET}"
     for i in $core_list; do
         local bias_to_set=""; if [ "$i" -le 3 ]; then bias_to_set="balance_performance"; else bias_to_set="performance"; fi
         local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
-        local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
         
-        # LOGIC FIX: Set Governor to powersave by default
-        if [ -w "$GOV_PATH" ]; then
-            echo -e "  ${C_INFO}↳ Core ${i}: Setting default governor to ${C_GOV}powersave${C_RESET}"
-            echo "powersave" > "$GOV_PATH"
+        if check_policy_availability "$i" "governor" "powersave"; then
+            if [ -w "$GOV_PATH" ]; then
+                echo -e "  ${C_INFO}↳ Core ${i}: Setting default governor to ${C_GOV}powersave${C_RESET}"
+                echo "powersave" > "$GOV_PATH"
+            fi
         fi
-        if [ -w "$BIAS_PATH" ]; then
-            echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
-            echo "$bias_to_set" > "$BIAS_PATH"
+        if check_policy_availability "$i" "bias" "$bias_to_set"; then
+            local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+            if [ -w "$BIAS_PATH" ]; then
+                echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
+                echo "$bias_to_set" > "$BIAS_PATH"
+            fi
         fi
     done
     echo -e "${C_SUCCESS}>> Default policies applied.${C_RESET}\n"
@@ -100,21 +129,26 @@ function apply_power_policies() {
     echo -e "${C_HEADER}Deploying Custom Power Management Policies...${C_RESET}"
     for i in $core_list; do
         local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
-        local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
 
-        # LOGIC FIX: If setting a non-performance bias, ensure governor is not performance.
         if [[ -n "$bias" && "$bias" != "performance" ]]; then
             if [ -f "$GOV_PATH" ] && [ "$(cat "$GOV_PATH")" == "performance" ]; then
-                echo -e "  ${C_INFO}↳ Core ${i}: Switching governor to 'powersave' to allow custom bias.${C_RESET}"
-                echo "powersave" > "$GOV_PATH"
+                if check_policy_availability "$i" "governor" "powersave"; then
+                    echo -e "  ${C_INFO}↳ Core ${i}: Switching governor to 'powersave' to allow custom bias.${C_RESET}"
+                    echo "powersave" > "$GOV_PATH"
+                fi
             fi
         fi
 
         if [[ -n "$governor" ]]; then
-            if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi
+            if check_policy_availability "$i" "governor" "$governor"; then
+                if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi
+            fi
         fi
         if [[ -n "$bias" ]]; then
-            if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi
+            if check_policy_availability "$i" "bias" "$bias"; then
+                local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+                if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi
+            fi
         fi
     done
     echo -e "${C_SUCCESS}>> Custom policies deployed.${C_RESET}\n"
