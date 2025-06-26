@@ -2,10 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 12.4 (FINAL)
+# SCRIPT 12.5 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Gracefully handles the absence of the 'online' file for core 0.
+# - The --on action now intelligently reports if a core is already online.
 #
 # #############################################################################
 
@@ -25,7 +25,7 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v12.4${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v12.5${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -52,21 +52,25 @@ function set_core_state() {
     local state=$1; local core_list=$2; local action_str="ONLINE"; if [ "$state" -eq 0 ]; then action_str="OFFLINE"; fi
     echo -e "${C_HEADER}Executing Core State Change: Setting cores to ${action_str}${C_RESET}"
     for i in $core_list; do
-        # Handle the special nature of core 0
         if [ "$i" -eq 0 ]; then
-            if [ "$state" -eq 1 ]; then # Trying to turn ON
-                echo -e "  ${C_INFO}↳ Verifying Core 0: Already online.${C_RESET}"
-            else # Trying to turn OFF
-                echo -e "  ${C_INFO}↳ Skipping Core 0: Cannot be taken offline.${C_RESET}"
-            fi
+            if [ "$state" -eq 1 ]; then echo -e "  ${C_INFO}↳ Verifying Core 0: Already online.${C_RESET}";
+            else echo -e "  ${C_INFO}↳ Skipping Core 0: Cannot be taken offline.${C_RESET}"; fi
             continue
         fi
 
-        # Logic for all other cores
         local ONLINE_PATH="/sys/devices/system/cpu/cpu${i}/online"
         if [ -f "$ONLINE_PATH" ]; then
-            echo -e "  ${C_INFO}↳ Setting Core ${i} to ${action_str}...${C_RESET}"
-            echo "$state" > "$ONLINE_PATH";
+            if [ "$state" -eq 1 ]; then # Action is ON
+                if [ "$(cat "$ONLINE_PATH")" -eq 1 ]; then
+                    echo -e "  ${C_INFO}↳ Verifying Core ${i}: Already online.${C_RESET}"
+                else
+                    echo -e "  ${C_INFO}↳ Setting Core ${i} to ONLINE...${C_RESET}"
+                    echo 1 > "$ONLINE_PATH"
+                fi
+            else # Action is OFF
+                echo -e "  ${C_INFO}↳ Setting Core ${i} to OFFLINE...${C_RESET}"
+                echo 0 > "$ONLINE_PATH"
+            fi
         else
             echo -e "  ${C_INFO}↳ Warning: Cannot control Core ${i} (sysfs path not found).${C_RESET}";
         fi
@@ -126,8 +130,6 @@ function show_status_table() {
 # =============================================================================
 # --- MAIN LOGIC ---
 # =============================================================================
-
-echo
 
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
