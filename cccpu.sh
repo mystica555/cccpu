@@ -2,7 +2,7 @@
 
 # #############################################################################
 #
-# SCRIPT 16.1 (PIXEL PERFECT)
+# SCRIPT 16.2 (MOAR PIXEL PERFECT)
 #
 # A modular command-line utility to view and manage CPU core status.
 # - Final, "bulletproof" refactoring of the status table's printf
@@ -42,13 +42,13 @@ function show_help() {
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
-    echo -e "  ${C_SUCCESS}(no flags)${C_RESET}       Displays the current status of all cores (default)."
-    echo -e "  ${C_SUCCESS}--on [<cores>]${C_RESET}   Enables cores. Defaults to 'all' if no list is given."
-    echo -e "  ${C_SUCCESS}--off [<cores>]${C_RESET}  Disables cores. Defaults to all except core 0."
+    echo -e "  ${C_SUCCESS}(no flags)${C_RESET}        Displays the current status of all cores (default)."
+    echo -e "  ${C_SUCCESS}--on [<cores>]${C_RESET}    Enables cores. Defaults to 'all' if no list is given."
+    echo -e "  ${C_SUCCESS}--off [<cores>]${C_RESET}   Disables cores. Defaults to all except core 0."
     echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor."
     echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias."
     echo -e "  ${C_SUCCESS}-c, --cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
-    echo -e "  ${C_SUCCESS}-h, --help${C_RESET}        Shows this help message."
+    echo -e "  ${C_SUCCESS}-h, --help${C_RESET}         Shows this help message."
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
 
@@ -208,3 +208,4 @@ fi
 
 if [ "$ACTION_TAKEN" -eq 1 ]; then show_online_cores; fi
 show_status_table
+
