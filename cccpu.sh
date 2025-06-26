@@ -2,10 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 12.6 (FINAL)
+# SCRIPT 12.7 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Adds a border to the Core Status Grid and a blank line at the start.
+# - Fixes the core status grid to display all cores on a single line.
 #
 # #############################################################################
 
@@ -38,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.6${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.7${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -100,14 +100,32 @@ function show_online_cores() {
         local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
         printf "${C_PIPE}|%*s${C_INFO}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
-        local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n)); local online_cores=" $(get_enumerated_online_cpus) "; local counter=0; local wrap_at=8; local grid_width=$(( (1 + 1 + 3) * wrap_at )); local grid_pad=$(( (TABLE_WIDTH - grid_width) / 2 ))
-        printf "%*s" "$grid_pad" "" # Left padding for the grid block
+
+        local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
+        local online_cores=" $(get_enumerated_online_cpus) "
+
+        # Calculate the exact width of the entire grid line to center it
+        local item_width=5 # Each item is "■ 123" which is 5 characters wide
+        local grid_content=""
         for i in "${all_cores[@]}"; do
-            if [[ $online_cores == *" $i "* ]]; then printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"; else printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"; fi
-            ((counter++)); if (( counter % wrap_at == 0 && counter != ${#all_cores[@]} )); then printf "\n%*s" "$grid_pad" ""; fi
+            if [[ $online_cores == *" $i "* ]]; then
+                grid_content+=$(printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i")
+            else
+                grid_content+=$(printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i")
+            fi
         done
-        printf "\n"; draw_line "$C_EQUAL" "="; echo ""
+        # The visible length of the grid content is the number of cores * item width
+        local grid_width=$(( ${#all_cores[@]} * item_width ))
+        local grid_pad=$(( (TABLE_WIDTH - 2 - grid_width) / 2 ))
+
+        # Print the centered grid on a single line
+        printf "${C_PIPE}|%*s" "$grid_pad" "" # Left pipe and padding
+        printf "%b" "$grid_content" # The grid itself
+        printf "%*s${C_PIPE}|\n" "$((TABLE_WIDTH - 2 - grid_width - grid_pad))" "" # Right padding and pipe
+
+        draw_line "$C_EQUAL" "="; echo ""
     else
+        # Fallback for non-interactive terminals
         local online_cores_text; online_cores_text=$(get_enumerated_online_cpus)
         echo "Verified online cores:"; echo "${online_cores_text}"; echo ""
     fi
