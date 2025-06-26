@@ -2,10 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 12.3 (FINAL)
+# SCRIPT 12.4 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes action logs to ensure they are always numerically sorted.
+# - Gracefully handles the absence of the 'online' file for core 0.
 #
 # #############################################################################
 
@@ -25,7 +25,7 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v12.3${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v12.4${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -41,21 +41,9 @@ function show_help() {
 
 function parse_core_list() {
     local input_str=$1; local expanded_list=""
-    if [[ "$input_str" == "all" ]]; then
-        expanded_list=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | tr '\n' ' ')
-    else
-        for part in ${input_str//,/ }; do
-            if [[ $part == *-* ]]; then
-                local start=${part%-*}; local end=${part#*-}; for ((i=start; i<=end; i++)); do expanded_list="$expanded_list $i"; done
-            else
-                expanded_list="$expanded_list $part";
-            fi
-        done
-    fi
-    # SORTING FIX: Ensure the final list is always numerically sorted.
-    local sorted_list
-    sorted_list=$(echo "${expanded_list# }" | tr ' ' '\n' | sort -n | tr '\n' ' ')
-    echo "${sorted_list% }" # Return sorted list and trim trailing space
+    if [[ "$input_str" == "all" ]]; then expanded_list=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | tr '\n' ' ');
+    else for part in ${input_str//,/ }; do if [[ $part == *-* ]]; then local start=${part%-*}; local end=${part#*-}; for ((i=start; i<=end; i++)); do expanded_list="$expanded_list $i"; done; else expanded_list="$expanded_list $part"; fi; done; fi
+    local sorted_list; sorted_list=$(echo "${expanded_list# }" | tr ' ' '\n' | sort -n | tr '\n' ' '); echo "${sorted_list% }";
 }
 
 function get_enumerated_online_cpus() { parse_core_list "$(cat /sys/devices/system/cpu/online)"; }
@@ -64,10 +52,24 @@ function set_core_state() {
     local state=$1; local core_list=$2; local action_str="ONLINE"; if [ "$state" -eq 0 ]; then action_str="OFFLINE"; fi
     echo -e "${C_HEADER}Executing Core State Change: Setting cores to ${action_str}${C_RESET}"
     for i in $core_list; do
-        if [ "$state" -eq 0 ] && [ "$i" -eq 0 ]; then echo -e "  ${C_INFO}↳ Skipping Core 0: Cannot be taken offline.${C_RESET}"; continue; fi
+        # Handle the special nature of core 0
+        if [ "$i" -eq 0 ]; then
+            if [ "$state" -eq 1 ]; then # Trying to turn ON
+                echo -e "  ${C_INFO}↳ Verifying Core 0: Already online.${C_RESET}"
+            else # Trying to turn OFF
+                echo -e "  ${C_INFO}↳ Skipping Core 0: Cannot be taken offline.${C_RESET}"
+            fi
+            continue
+        fi
+
+        # Logic for all other cores
         local ONLINE_PATH="/sys/devices/system/cpu/cpu${i}/online"
-        if [ -f "$ONLINE_PATH" ]; then echo -e "  ${C_INFO}↳ Setting Core ${i} to ${action_str}...${C_RESET}"; echo "$state" > "$ONLINE_PATH";
-        else echo -e "  ${C_INFO}↳ Warning: Cannot control Core ${i} (sysfs path not found).${C_RESET}"; fi
+        if [ -f "$ONLINE_PATH" ]; then
+            echo -e "  ${C_INFO}↳ Setting Core ${i} to ${action_str}...${C_RESET}"
+            echo "$state" > "$ONLINE_PATH";
+        else
+            echo -e "  ${C_INFO}↳ Warning: Cannot control Core ${i} (sysfs path not found).${C_RESET}";
+        fi
     done
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
@@ -124,6 +126,8 @@ function show_status_table() {
 # =============================================================================
 # --- MAIN LOGIC ---
 # =============================================================================
+
+echo
 
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
