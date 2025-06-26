@@ -2,10 +2,13 @@
 
 # #############################################################################
 #
-# SCRIPT 12.8 (FINAL)
+# SCRIPT 12.9 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Final cosmetic updates to titles, table padding, and error message color.
+# - Final, major refactoring of the status table for perfect alignment:
+#   - Headers are centered within columns.
+#   - Data is centered, except for the Bias column which is left-aligned.
+#   - Titles and error messages are corrected.
 #
 # #############################################################################
 
@@ -14,9 +17,7 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET='\e[0m'; C_BOLD='\e[1m'
   C_TITLE='\e[1;38;5;228m'; C_HEADER='\e[1;38;5;39m'; C_CORE='\e[38;5;228m'
   C_STATUS_ON='\e[38;5;154m'; C_STATUS_OFF='\e[38;5;196m'; C_GOV='\e[38;5;141m'
-  C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'
-  C_ERROR='\e[1;38;5;196m' # FIXED: Removed stray ']'
-  # All-Green Border Palette
+  C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'; C_ERROR='\e[1;38;5;196m'
   C_PLUS='\e[38;5;47m'; C_PIPE='\e[38;5;41m'; C_DASH='\e[38;5;28m'; C_EQUAL='\e[38;5;22m'
 else
   for v in C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_PLUS C_PIPE C_DASH C_EQUAL; do eval "$v=''"; done
@@ -26,10 +27,9 @@ fi
 # --- GLOBAL HELPERS & DEFINITIONS ---
 # =============================================================================
 
-# Define column widths and calculate total table width globally for reuse
-COL1_W=12; COL2_W=12; COL3_W=15; COL4_W=25
-# UPDATED: Added 12 to width for the new padding (3 spaces * 4 columns)
-TABLE_WIDTH=$((COL1_W + COL2_W + COL3_W + COL4_W + 13 + 12))
+# Define CELL widths, including padding, for a consistent table structure
+CELL1_W=16; CELL2_W=16; CELL3_W=20; CELL4_W=30
+TABLE_WIDTH=$((CELL1_W + CELL2_W + CELL3_W + CELL4_W + 5)) # 5 for the pipes
 
 # Helper function to draw a multi-colored line, now globally accessible
 function draw_line() {
@@ -41,7 +41,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.8${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v12.9${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -98,8 +98,8 @@ function apply_power_policies() {
 
 function show_online_cores() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+        local TITLE="CPU Core Status"
         draw_line "$C_EQUAL" "="
-        local TITLE="CPU Core Status" # UPDATED: Title
         local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
         printf "${C_PIPE}|%*s${C_INFO}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
@@ -119,16 +119,23 @@ function show_online_cores() {
 }
 
 function show_status_table() {
-    function _print_centered() { local width=$1 text=$2 color=$3; local pad_len=$(( (width - ${#text}) / 2 )); printf "${color}%*s%s%*s${C_RESET}" "$pad_len" "" "$text" "$((width - ${#text} - pad_len))" ""; }
-    local TITLE="Detailed Core Status" # UPDATED: Title
+    # Helper to print a centered string within a given cell width
+    function _print_centered() { local width=$1 text=$2 color=$3; local pad_len=$(( (width - ${#text}) / 2 )); printf "${color}%*s%s%*s${C_RESET}" "$pad_len" "" "$text" "$((width - ${#text} - pad_len))"; }
+    # Helper to print a left-justified string within a given cell width, with padding
+    function _print_left() { local width=$1 text=$2 color=$3; printf "${color}   %-*s ${C_RESET}" "$((width-4))" "$text"; }
+
+    local TITLE="Detailed Core Status"
     local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
     draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_PIPE}%*s|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))"; draw_line "$C_EQUAL" "="
-    # UPDATED: Added 3 spaces of padding to each header column
-    printf "${C_PIPE}|    ${C_RESET}"; _print_centered "$COL1_W" "NODE" "$C_HEADER"
-    printf "${C_PIPE} |    ${C_RESET}"; _print_centered "$COL2_W" "STATUS" "$C_HEADER"
-    printf "${C_PIPE} |    ${C_RESET}"; _print_centered "$COL3_W" "GOVERNOR" "$C_HEADER"
-    printf "${C_PIPE} |    ${C_RESET}"; _print_centered "$COL4_W" "BIAS" "$C_HEADER"
-    printf "${C_PIPE} |\n"; draw_line "$C_DASH" "-"
+
+    # Print CENTERED table headers
+    printf "${C_PIPE}"; _print_centered "$CELL1_W" "NODE" "$C_HEADER"
+    printf "${C_PIPE}"; _print_centered "$CELL2_W" "STATUS" "$C_HEADER"
+    printf "${C_PIPE}"; _print_centered "$CELL3_W" "GOVERNOR" "$C_HEADER"
+    printf "${C_PIPE}"; _print_centered "$CELL4_W" "BIAS" "$C_HEADER"
+    printf "${C_PIPE}\n"
+    draw_line "$C_DASH" "-"
+
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
     for i in "${all_cores[@]}"; do
         local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"; local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}"
@@ -138,8 +145,13 @@ function show_status_table() {
             if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi; if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
         fi
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
-        # UPDATED: Added 3 spaces of padding to each data cell
-        printf "${C_PIPE}|    ${C_CORE}%-*s ${C_PIPE}|    ${STATUS_COLOR}%-*s ${C_PIPE}|    ${GOV_COLOR}%-*s ${C_PIPE}|    ${EPP_COLOR}%-*s ${C_PIPE}|\n" "$COL1_W" "Core $i" "$COL2_W" "$ONLINE_STATUS" "$COL3_W" "$GOV" "$COL4_W" "$EPP_VAL"
+
+        # Print data rows with new alignment
+        printf "${C_PIPE}"; _print_centered "$CELL1_W" "Core $i" "$C_CORE"
+        printf "${C_PIPE}"; _print_centered "$CELL2_W" "$ONLINE_STATUS" "$STATUS_COLOR"
+        printf "${C_PIPE}"; _print_centered "$CELL3_W" "$GOV" "$GOV_COLOR"
+        printf "${C_PIPE}"; _print_left "$CELL4_W" "$EPP_VAL" "$EPP_COLOR" # Left-aligned
+        printf "${C_PIPE}\n"
     done
     draw_line "$C_EQUAL" "=";
 }
