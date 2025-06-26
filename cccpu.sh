@@ -2,10 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 12.2 (CORE 0 FIX)
+# SCRIPT 12.3 (FINAL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes a bug where `all` did not include core 0 when setting policies.
+# - Fixes action logs to ensure they are always numerically sorted.
 #
 # #############################################################################
 
@@ -25,7 +25,7 @@ fi
 # =============================================================================
 
 function show_help() {
-    echo -e "${C_TITLE}CPU Core Control Utility v12.2${C_RESET}"
+    echo -e "${C_TITLE}CPU Core Control Utility v12.3${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -42,7 +42,6 @@ function show_help() {
 function parse_core_list() {
     local input_str=$1; local expanded_list=""
     if [[ "$input_str" == "all" ]]; then
-        # CORRECTED: Get ALL cores, including 0. Let the calling function decide what to do.
         expanded_list=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | tr '\n' ' ')
     else
         for part in ${input_str//,/ }; do
@@ -53,7 +52,10 @@ function parse_core_list() {
             fi
         done
     fi
-    echo "${expanded_list# }";
+    # SORTING FIX: Ensure the final list is always numerically sorted.
+    local sorted_list
+    sorted_list=$(echo "${expanded_list# }" | tr ' ' '\n' | sort -n | tr '\n' ' ')
+    echo "${sorted_list% }" # Return sorted list and trim trailing space
 }
 
 function get_enumerated_online_cpus() { parse_core_list "$(cat /sys/devices/system/cpu/online)"; }
@@ -62,15 +64,10 @@ function set_core_state() {
     local state=$1; local core_list=$2; local action_str="ONLINE"; if [ "$state" -eq 0 ]; then action_str="OFFLINE"; fi
     echo -e "${C_HEADER}Executing Core State Change: Setting cores to ${action_str}${C_RESET}"
     for i in $core_list; do
-        # This safety check correctly protects core 0
         if [ "$state" -eq 0 ] && [ "$i" -eq 0 ]; then echo -e "  ${C_INFO}↳ Skipping Core 0: Cannot be taken offline.${C_RESET}"; continue; fi
         local ONLINE_PATH="/sys/devices/system/cpu/cpu${i}/online"
-        if [ -f "$ONLINE_PATH" ]; then
-            # For --on, attempting to set core 0 online is a harmless, idempotent action.
-            echo -e "  ${C_INFO}↳ Setting Core ${i} to ${action_str}...${C_RESET}"; echo "$state" > "$ONLINE_PATH";
-        else
-            echo -e "  ${C_INFO}↳ Warning: Cannot control Core ${i} (sysfs path not found).${C_RESET}";
-        fi
+        if [ -f "$ONLINE_PATH" ]; then echo -e "  ${C_INFO}↳ Setting Core ${i} to ${action_str}...${C_RESET}"; echo "$state" > "$ONLINE_PATH";
+        else echo -e "  ${C_INFO}↳ Warning: Cannot control Core ${i} (sysfs path not found).${C_RESET}"; fi
     done
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
@@ -81,10 +78,7 @@ function apply_default_policies() {
     for i in $core_list; do
         local bias_to_set=""; if [ "$i" -le 3 ]; then bias_to_set="balance_performance"; else bias_to_set="performance"; fi
         local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
-        if [ -w "$BIAS_PATH" ]; then
-            echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
-            echo "$bias_to_set" > "$BIAS_PATH"
-        fi
+        if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"; echo "$bias_to_set" > "$BIAS_PATH"; fi
     done
     echo -e "${C_SUCCESS}>> Default policies applied.${C_RESET}\n"
 }
@@ -101,7 +95,8 @@ function apply_power_policies() {
 
 function show_online_cores() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-        echo -e "${C_INFO}System Core Status Grid:${C_RESET}"; local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n)); local online_cores=" $(get_enumerated_online_cpus) "; local counter=0; local wrap_at=16
+        echo "System Core Status Grid:"
+        local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n)); local online_cores=" $(get_enumerated_online_cpus) "; local counter=0; local wrap_at=16
         for i in "${all_cores[@]}"; do if [[ $online_cores == *" $i "* ]]; then printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"; else printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"; fi; ((counter++)); if (( counter % wrap_at == 0 )); then printf "\n"; fi; done; printf "\n\n"
     else local online_cores_text; online_cores_text=$(get_enumerated_online_cpus); echo "Verified online cores:"; echo "${online_cores_text}"; echo ""; fi
 }
@@ -134,11 +129,8 @@ if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --on)
-            ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then ON_CORES_STR="$2"; shift 2; else ON_CORES_STR="all"; shift 1; fi ;;
-        --off)
-            ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then OFF_CORES_STR="$2"; shift 2;
-            else OFF_CORES_STR=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ','); shift 1; fi ;;
+        --on) ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then ON_CORES_STR="$2"; shift 2; else ON_CORES_STR="all"; shift 1; fi ;;
+        --off) ACTION_TAKEN=1; if [[ -n "$2" && "$2" != -* ]]; then OFF_CORES_STR="$2"; shift 2; else OFF_CORES_STR=$(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | grep -v '^0$' | tr '\n' ','); shift 1; fi ;;
         -g|--governor) GOVERNOR_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
         -b|--bias) BIAS_TO_SET="$2"; ACTION_TAKEN=1; shift 2 ;;
         --cores) CORES_FOR_POLICY_STR="$2"; shift 2 ;;
@@ -150,9 +142,7 @@ done
 if [[ -n "$ON_CORES_STR" ]]; then
     cores_to_enable=$(parse_core_list "$ON_CORES_STR")
     set_core_state 1 "$cores_to_enable"
-    if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then
-        apply_default_policies "$cores_to_enable"
-    fi
+    if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then apply_default_policies "$cores_to_enable"; fi
 fi
 if [[ -n "$OFF_CORES_STR" ]]; then
     set_core_state 0 "$(parse_core_list "$OFF_CORES_STR")"
