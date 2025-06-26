@@ -2,10 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 19.4 (OUTPUT CONTROL)
+# SCRIPT 19.5 (SECURITY FIX)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Adds --grid and --table flags to control output visibility.
+# - Re-implements a root check on all functions that modify system state,
+#   while allowing read-only operations for regular users.
 #
 # #############################################################################
 
@@ -37,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.4${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.5${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -69,6 +70,13 @@ function show_help() {
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
 
+# --- NEW Function to check for root privileges ---
+function check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "\n${C_ERROR}Error: This action requires root privileges. Please run with sudo.${C_RESET}\n" >&2
+        exit 1
+    fi
+}
 
 function parse_core_list() {
     local input_str=$1; local expanded_list=""
@@ -80,6 +88,7 @@ function parse_core_list() {
 function get_enumerated_online_cpus() { parse_core_list "$(cat /sys/devices/system/cpu/online)"; }
 
 function set_core_state() {
+    check_root # Security Check
     local state=$1; local core_list=$2; local action_str="ONLINE"; if [ "$state" -eq 0 ]; then action_str="OFFLINE"; fi
     echo -e "${C_HEADER}Executing Core State Change: Setting cores to ${action_str}${C_RESET}"
     for i in $core_list; do
@@ -110,6 +119,7 @@ function check_policy_availability() {
 }
 
 function apply_default_policies() {
+    check_root # Security Check
     local core_list=$1
     echo -e "${C_HEADER}Applying Default Policies...${C_RESET}"
     for i in $core_list; do
@@ -127,6 +137,7 @@ function apply_default_policies() {
 }
 
 function apply_power_policies() {
+    check_root # Security Check
     local governor=$1; local bias=$2; local core_list=$3
     echo -e "${C_HEADER}Deploying Custom Power Management Policies...${C_RESET}"
     for i in $core_list; do
@@ -197,15 +208,15 @@ function show_status_table() {
 
 echo # Start with a blank line for separation
 
-ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
-ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0
-
-# If no arguments are given, default to showing everything
+# If no arguments are given, just show status and exit.
 if [ -z "$1" ]; then
     show_online_cores
     show_status_table
     exit 0
 fi
+
+ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
+ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0; LIST_GOV=0; LIST_BIAS=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -214,13 +225,13 @@ while [[ $# -gt 0 ]]; do
         -g|--governor)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'performance' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then list_available_policies "governor"; exit 0; fi
+            if [[ "$2" == "list" ]]; then LIST_GOV=1; shift 2; continue; fi
             GOVERNOR_TO_SET="$2"; shift 2
             ;;
         -b|--bias)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'powersave' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then list_available_policies "bias"; exit 0; fi
+            if [[ "$2" == "list" ]]; then LIST_BIAS=1; shift 2; continue; fi
             BIAS_TO_SET="$2"; shift 2
             ;;
         -c|--cores)
@@ -233,6 +244,14 @@ while [[ $# -gt 0 ]]; do
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
 done
+
+# Execute list actions if they were flagged
+if (( LIST_GOV == 1 )); then list_available_policies "governor"; fi
+if (( LIST_BIAS == 1 )); then list_available_policies "bias"; fi
+# Exit after listing if no other action was specified
+if (( (LIST_GOV == 1 || LIST_BIAS == 1) && ON_CORES_STR == "" && OFF_CORES_STR == "" && GOVERNOR_TO_SET == "" && BIAS_TO_SET == "" )); then
+    exit 0
+fi
 
 if [[ -n "$ON_CORES_STR" ]]; then
     cores_to_enable=$(parse_core_list "$ON_CORES_STR"); set_core_state 1 "$cores_to_enable"
