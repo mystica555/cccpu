@@ -2,11 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 18.0 (DYNAMIC ERROR HANDLING)
+# SCRIPT 19.0 (LIST SUBCOMMANDS)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Adds dynamic error handling to verify that a requested governor or bias
-#   is available on the system before attempting to apply it.
+# - Adds a 'list' subcommand to --governor and --bias to show available
+#   options on the system.
 #
 # #############################################################################
 
@@ -38,15 +38,15 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v18.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
     echo -e "  ${C_SUCCESS}(no flags)${C_RESET}        Displays the current status of all cores (default)."
     echo -e "  ${C_SUCCESS}--on [<cores>]${C_RESET}    Enables cores. Defaults to 'all' if no list is given."
     echo -e "  ${C_SUCCESS}--off [<cores>]${C_RESET}   Disables cores. Defaults to all except core 0."
-    echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor."
-    echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias."
+    echo -e "  ${C_SUCCESS}-g, --governor <name|list>${C_RESET} Sets governor or lists available governors."
+    echo -e "  ${C_SUCCESS}-b, --bias <name|list>${C_RESET}      Sets bias or lists available biases."
     echo -e "  ${C_SUCCESS}-c, --cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
     echo -e "  ${C_SUCCESS}-h, --help${C_RESET}         Shows this help message."
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
@@ -73,30 +73,38 @@ function set_core_state() {
     echo -e "${C_SUCCESS}>> Action complete.${C_RESET}\n"
 }
 
-# --- NEW Function to check if a policy is available for a given core ---
-function check_policy_availability() {
-    local core_num=$1
-    local policy_type=$2 # "governor" or "bias"
-    local policy_value=$3
-    local available_path=""
-    local valid=0
+# --- NEW Function to list available policies ---
+function list_available_policies() {
+    local policy_type=$1
+    local file_path=""
+    local title=""
 
     if [[ "$policy_type" == "governor" ]]; then
-        available_path="/sys/devices/system/cpu/cpu${core_num}/cpufreq/scaling_available_governors"
+        file_path="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
+        title="Available Governors"
     elif [[ "$policy_type" == "bias" ]]; then
-        available_path="/sys/devices/system/cpu/cpu${core_num}/cpufreq/energy_performance_available_preferences"
+        file_path="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences"
+        title="Available Bias Profiles"
+    else
+        return
     fi
+    
+    echo -e "${C_HEADER}${title}:${C_RESET}"
+    if [ -f "$file_path" ]; then
+        echo -e "${C_YELLOW}$(cat "$file_path")${C_RESET}"
+    else
+        echo -e "${C_ERROR}  Information not available on this system.${C_RESET}"
+    fi
+    echo
+}
 
-    if [ -f "$available_path" ]; then
-        if grep -q "\<$policy_value\>" "$available_path"; then
-            valid=1
-        fi
-    fi
-
-    if [ "$valid" -eq 0 ]; then
-        echo -e "  ${C_ERROR}Error: Policy '${policy_type}' value '${policy_value}' is not available for Core ${core_num}.${C_RESET}"
-        return 1
-    fi
+function check_policy_availability() {
+    local core_num=$1; local policy_type=$2; local policy_value=$3
+    local available_path=""; local valid=0
+    if [[ "$policy_type" == "governor" ]]; then available_path="/sys/devices/system/cpu/cpu${core_num}/cpufreq/scaling_available_governors";
+    elif [[ "$policy_type" == "bias" ]]; then available_path="/sys/devices/system/cpu/cpu${core_num}/cpufreq/energy_performance_available_preferences"; fi
+    if [ -f "$available_path" ]; then if grep -q "\<$policy_value\>" "$available_path"; then valid=1; fi; fi
+    if [ "$valid" -eq 0 ]; then echo -e "  ${C_ERROR}Error: Policy '${policy_type}' value '${policy_value}' is not available for Core ${core_num}.${C_RESET}"; return 1; fi
     return 0
 }
 
@@ -105,20 +113,13 @@ function apply_default_policies() {
     echo -e "${C_HEADER}Applying Default Policies...${C_RESET}"
     for i in $core_list; do
         local bias_to_set=""; if [ "$i" -le 3 ]; then bias_to_set="balance_performance"; else bias_to_set="performance"; fi
-        local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
-        
         if check_policy_availability "$i" "governor" "powersave"; then
-            if [ -w "$GOV_PATH" ]; then
-                echo -e "  ${C_INFO}↳ Core ${i}: Setting default governor to ${C_GOV}powersave${C_RESET}"
-                echo "powersave" > "$GOV_PATH"
-            fi
+            local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
+            if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting default governor to ${C_GOV}powersave${C_RESET}"; echo "powersave" > "$GOV_PATH"; fi
         fi
         if check_policy_availability "$i" "bias" "$bias_to_set"; then
             local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
-            if [ -w "$BIAS_PATH" ]; then
-                echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"
-                echo "$bias_to_set" > "$BIAS_PATH"
-            fi
+            if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting default bias to ${C_EPP}${bias_to_set}${C_RESET}"; echo "$bias_to_set" > "$BIAS_PATH"; fi
         fi
     done
     echo -e "${C_SUCCESS}>> Default policies applied.${C_RESET}\n"
@@ -129,27 +130,13 @@ function apply_power_policies() {
     echo -e "${C_HEADER}Deploying Custom Power Management Policies...${C_RESET}"
     for i in $core_list; do
         local GOV_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
-
         if [[ -n "$bias" && "$bias" != "performance" ]]; then
             if [ -f "$GOV_PATH" ] && [ "$(cat "$GOV_PATH")" == "performance" ]; then
-                if check_policy_availability "$i" "governor" "powersave"; then
-                    echo -e "  ${C_INFO}↳ Core ${i}: Switching governor to 'powersave' to allow custom bias.${C_RESET}"
-                    echo "powersave" > "$GOV_PATH"
-                fi
+                if check_policy_availability "$i" "governor" "powersave"; then echo -e "  ${C_INFO}↳ Core ${i}: Switching governor to 'powersave' to allow custom bias.${C_RESET}"; echo "powersave" > "$GOV_PATH"; fi
             fi
         fi
-
-        if [[ -n "$governor" ]]; then
-            if check_policy_availability "$i" "governor" "$governor"; then
-                if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi
-            fi
-        fi
-        if [[ -n "$bias" ]]; then
-            if check_policy_availability "$i" "bias" "$bias"; then
-                local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
-                if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi
-            fi
-        fi
+        if [[ -n "$governor" ]]; then if check_policy_availability "$i" "governor" "$governor"; then if [ -w "$GOV_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting governor to ${C_GOV}${governor}${C_RESET}"; echo "$governor" > "$GOV_PATH"; fi; fi; fi
+        if [[ -n "$bias" ]]; then if check_policy_availability "$i" "bias" "$bias"; then local BIAS_PATH="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"; if [ -w "$BIAS_PATH" ]; then echo -e "  ${C_INFO}↳ Core ${i}: Setting bias to ${C_EPP}${bias}${C_RESET}"; echo "$bias" > "$BIAS_PATH"; fi; fi; fi
     done
     echo -e "${C_SUCCESS}>> Custom policies deployed.${C_RESET}\n"
 }
@@ -177,37 +164,17 @@ function show_online_cores() {
 }
 
 function show_status_table() {
-    # --- Define exact CELL content widths from mock-up ---
     local W_NODE=10; local W_STATUS=10; local W_GOV=13; local W_BIAS=27
-
-    # --- Formatting helper functions (return PLAIN PADDED text) ---
     function _get_centered() { local width=$1 text=$2; local pad_l=$(( (width - ${#text}) / 2 )); local pad_r=$((width - ${#text} - pad_l)); printf "%*s%s%*s" "$pad_l" "" "$text" "$pad_r"; }
     function _get_node() { local width=$1 text=$2; local num=${text##* }; local str; str=$(printf "Core %s" "$num"); local pad_l=2; local pad_r=$((width - ${#str} - pad_l)); printf "%*s%s%*s" "$pad_l" "" "$str" "$pad_r"; }
     function _get_centered_bias() { local width=$1 text=$2; local pad_l=$(( (width - ${#text}) / 2 - 2)); local pad_r=$((width - ${#text} - pad_l - 4)); printf "%*s%s%*s" "$pad_l" "" "$text" "$pad_r"; }
-
     local TITLE="Detailed Core Status"
     local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
     draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
     draw_line "$C_EQUAL" "="
-
-    # --- Pre-format PLAIN TEXT header strings ---
-    local h_node;   h_node=$(_get_centered "$W_NODE" "NODE")
-    local h_status; h_status=$(_get_centered "$W_STATUS" "STATUS")
-    local h_gov;    h_gov=$(_get_centered "$W_GOV" "GOVERNOR")
-    local h_bias;   h_bias=$(_get_centered_bias "$W_BIAS" "BIAS")
-
-    # --- Assemble Header Row piece-by-piece for guaranteed pipes ---
-    printf "${C_PIPE}|"
-    printf " ${C_HEADER}%s${C_RESET} " "$h_node"
-    printf "${C_PIPE}|"
-    printf " ${C_HEADER}%s${C_RESET} " "$h_status"
-    printf "${C_PIPE}|"
-    printf " ${C_HEADER}%s${C_RESET} " "$h_gov"
-    printf "${C_PIPE}|"
-    printf " ${C_HEADER}%s${C_RESET} " "$h_bias"
-    printf "${C_PIPE}|\n"
+    local h_node;   h_node=$(_get_centered "$W_NODE" "NODE"); local h_status; h_status=$(_get_centered "$W_STATUS" "STATUS"); local h_gov;    h_gov=$(_get_centered "$W_GOV" "GOVERNOR"); local h_bias;   h_bias=$(_get_centered_bias "$W_BIAS" "BIAS")
+    printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_node"; printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_status"; printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_gov"; printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_bias"; printf "${C_PIPE}|\n"
     draw_line "$C_DASH" "-"
-
     local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
     for i in "${all_cores[@]}"; do
         local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"; local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}"
@@ -217,23 +184,8 @@ function show_status_table() {
             if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi; if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
         fi
         if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
-
-        # --- Pre-format PLAIN TEXT data strings ---
-        local d_node;   d_node=$(_get_node "$W_NODE" "Core $i")
-        local d_status; d_status=$(_get_centered "$W_STATUS" "$ONLINE_STATUS")
-        local d_gov;    d_gov=$(_get_centered "$W_GOV" "$GOV")
-        local d_bias;   d_bias=$(_get_centered_bias "$W_BIAS" "$EPP_VAL")
-
-        # --- Assemble Data Row piece-by-piece for guaranteed pipes ---
-        printf "${C_PIPE}|"
-        printf " ${C_CORE}%s${C_RESET} " "$d_node"
-        printf "${C_PIPE}|"
-        printf " ${STATUS_COLOR}%s${C_RESET} " "$d_status"
-        printf "${C_PIPE}|"
-        printf " ${GOV_COLOR}%s${C_RESET} " "$d_gov"
-        printf "${C_PIPE}|"
-        printf " ${EPP_COLOR}%s${C_RESET} " "$d_bias"
-        printf "${C_PIPE}|\n"
+        local d_node;   d_node=$(_get_node "$W_NODE" "Core $i"); local d_status; d_status=$(_get_centered "$W_STATUS" "$ONLINE_STATUS"); local d_gov;    d_gov=$(_get_centered "$W_GOV" "$GOV"); local d_bias;   d_bias=$(_get_centered_bias "$W_BIAS" "$EPP_VAL")
+        printf "${C_PIPE}|"; printf " ${C_CORE}%s${C_RESET} " "$d_node"; printf "${C_PIPE}|"; printf " ${STATUS_COLOR}%s${C_RESET} " "$d_status"; printf "${C_PIPE}|"; printf " ${GOV_COLOR}%s${C_RESET} " "$d_gov"; printf "${C_PIPE}|"; printf " ${EPP_COLOR}%s${C_RESET} " "$d_bias"; printf "${C_PIPE}|\n"
     done
     draw_line "$C_EQUAL" "=";
 }
@@ -243,6 +195,20 @@ function show_status_table() {
 # =============================================================================
 
 echo # Start with a blank line for separation
+# Handle list commands first, as they are informational and should exit.
+for arg in "$@"; do
+    if [[ "$arg" == "list" ]]; then
+        if [[ "$prev_arg" == "-g" || "$prev_arg" == "--governor" ]]; then
+            list_available_policies "governor"
+            exit 0
+        elif [[ "$prev_arg" == "-b" || "$prev_arg" == "--bias" ]]; then
+            list_available_policies "bias"
+            exit 0
+        fi
+    fi
+    prev_arg="$arg"
+done
+
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
 while [[ $# -gt 0 ]]; do
