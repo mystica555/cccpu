@@ -2,12 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 16.0 (PIXEL PERFECT)
+# SCRIPT 16.1 (PIXEL PERFECT)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - The table-drawing function has been completely rewritten from the ground up
-#   with a bulletproof, unified printf structure to EXACTLY match the
-#   user's final visual mock-up. This is the one.
+# - Final, "bulletproof" refactoring of the status table's printf
+#   statement to guarantee column separators and alignment are perfect.
 #
 # #############################################################################
 
@@ -27,7 +26,7 @@ fi
 # =============================================================================
 
 # Define EXACT table width from final mock-up
-TABLE_WIDTH=70
+TABLE_WIDTH=69
 
 # Helper function to draw a multi-colored line
 function draw_line() {
@@ -39,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v16.1${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -48,7 +47,7 @@ function show_help() {
     echo -e "  ${C_SUCCESS}--off [<cores>]${C_RESET}  Disables cores. Defaults to all except core 0."
     echo -e "  ${C_SUCCESS}-g, --governor <name>${C_RESET}  Sets the scaling governor."
     echo -e "  ${C_SUCCESS}-b, --bias <name>${C_RESET}      Sets the energy performance bias."
-    echo -e "  ${C_SUCCESS}--cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
+    echo -e "  ${C_SUCCESS}-c, --cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
     echo -e "  ${C_SUCCESS}-h, --help${C_RESET}        Shows this help message."
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
@@ -123,7 +122,7 @@ function show_status_table() {
     # --- Formatting helper functions (return PLAIN PADDED text) ---
     function _get_centered() { local width=$1 text=$2; local pad_l=$(( (width - ${#text}) / 2 )); local pad_r=$((width - ${#text} - pad_l)); printf "%*s%s%*s" "$pad_l" "" "$text" "$pad_r"; }
     function _get_node() { local width=$1 text=$2; local num=${text##* }; local str; str=$(printf "Core %s" "$num"); local pad_l=2; local pad_r=$((width - ${#str} - pad_l)); printf "%*s%s%*s" "$pad_l" "" "$str" "$pad_r"; }
-    function _get_bias() { local width=$1 text=$2; local longest="balance_performance"; local pad=$(( (width - ${#longest}) / 2 )); printf "%*s%-*s" "$pad" "" "$((width-pad))" "$text"; }
+    function _get_centered_bias() { local width=$1 text=$2; local pad_l=$(( (width - ${#text}) / 2 - 2)); local pad_r=$((width - ${#text} - pad_l - 4)); printf "%*s%s%*s" "$pad_l" "" "$text" "$pad_r"; }
 
     local TITLE="Detailed Core Status"
     local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
@@ -134,9 +133,9 @@ function show_status_table() {
     local h_node;   h_node=$(_get_centered "$W_NODE" "NODE")
     local h_status; h_status=$(_get_centered "$W_STATUS" "STATUS")
     local h_gov;    h_gov=$(_get_centered "$W_GOV" "GOVERNOR")
-    local h_bias;   h_bias=$(_get_centered "$W_BIAS" "BIAS")
+    local h_bias;   h_bias=$(_get_centered_bias "$W_BIAS" "BIAS")
 
-    # --- Assemble Header Row piece-by-piece ---
+    # --- Assemble Header Row piece-by-piece for guaranteed pipes ---
     printf "${C_PIPE}|"
     printf " ${C_HEADER}%s${C_RESET} " "$h_node"
     printf "${C_PIPE}|"
@@ -162,9 +161,9 @@ function show_status_table() {
         local d_node;   d_node=$(_get_node "$W_NODE" "Core $i")
         local d_status; d_status=$(_get_centered "$W_STATUS" "$ONLINE_STATUS")
         local d_gov;    d_gov=$(_get_centered "$W_GOV" "$GOV")
-        local d_bias;   d_bias=$(_get_bias "$W_BIAS" "$EPP_VAL")
+        local d_bias;   d_bias=$(_get_centered_bias "$W_BIAS" "$EPP_VAL")
 
-        # --- Assemble Data Row piece-by-piece ---
+        # --- Assemble Data Row piece-by-piece for guaranteed pipes ---
         printf "${C_PIPE}|"
         printf " ${C_CORE}%s${C_RESET} " "$d_node"
         printf "${C_PIPE}|"
