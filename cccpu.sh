@@ -2,11 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 19.6 (SYNTAX FIX)
+# SCRIPT 19.7 (DISPLAY FIX & FEATURES)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes a critical syntax error in the argument parsing logic that could
-#   cause the script to fail.
+# - Fixes a bug where display flags were ignored without an action.
+# - Adds -G/--grid and -T/--table short options.
 #
 # #############################################################################
 
@@ -38,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.6${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.7${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -64,8 +64,8 @@ function show_help() {
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-h, --help" "${options['-h, --help']}"
     
     echo; echo -e "${C_BOLD}DISPLAY FLAGS:${C_RESET}"
-    echo -e "  ${C_SUCCESS}--grid${C_RESET}           Only displays the CPU Core Status grid."
-    echo -e "  ${C_SUCCESS}--table${C_RESET}          Only displays the Detailed Core Status table."
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-G, --grid" "Only displays the CPU Core Status grid."
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-T, --table" "Only displays the Detailed Core Status table."
 
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
@@ -210,7 +210,7 @@ echo # Start with a blank line for separation
 
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
-ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0; LIST_GOV=0; LIST_BIAS=0
+ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -219,28 +219,26 @@ while [[ $# -gt 0 ]]; do
         -g|--governor)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'performance' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then LIST_GOV=1; shift 1; continue; fi # Use continue to allow chaining
+            if [[ "$2" == "list" ]]; then list_available_policies "governor"; exit 0; fi
             GOVERNOR_TO_SET="$2"; shift 2
             ;;
         -b|--bias)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'powersave' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then LIST_BIAS=1; shift 1; continue; fi # Use continue to allow chaining
+            if [[ "$2" == "list" ]]; then list_available_policies "bias"; exit 0; fi
             BIAS_TO_SET="$2"; shift 2
             ;;
         -c|--cores)
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires a core specification.${C_RESET}"; show_help; exit 1; fi
             CORES_FOR_POLICY_STR="$2"; shift 2
             ;;
-        --grid) SHOW_GRID_FLAG=1; shift 1 ;;
-        --table) SHOW_TABLE_FLAG=1; shift 1 ;;
+        -G|--grid) SHOW_GRID_FLAG=1; shift 1 ;;
+        -T|--table) SHOW_TABLE_FLAG=1; shift 1 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
 done
 
-if (( LIST_GOV == 1 )); then list_available_policies "governor"; fi
-if (( LIST_BIAS == 1 )); then list_available_policies "bias"; fi
 if [[ -n "$ON_CORES_STR" ]]; then
     cores_to_enable=$(parse_core_list "$ON_CORES_STR"); set_core_state 1 "$cores_to_enable"
     if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then apply_default_policies "$cores_to_enable"; fi
@@ -251,13 +249,11 @@ if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
 
-# Determine what to show if actions were taken
-if [ "$ACTION_TAKEN" -eq 1 ]; then
-    if (( SHOW_GRID_FLAG == 0 && SHOW_TABLE_FLAG == 0 )); then
-        show_online_cores
-        show_status_table
-    else
-        if (( SHOW_GRID_FLAG == 1 )); then show_online_cores; fi
-        if (( SHOW_TABLE_FLAG == 1 )); then show_status_table; fi
-    fi
+# Determine what to show
+if (( SHOW_GRID_FLAG == 1 || SHOW_TABLE_FLAG == 1 )); then
+    if (( SHOW_GRID_FLAG == 1 )); then show_online_cores; fi
+    if (( SHOW_TABLE_FLAG == 1 )); then show_status_table; fi
+elif [ "$ACTION_TAKEN" -eq 1 ]; then
+    show_online_cores
+    show_status_table
 fi
