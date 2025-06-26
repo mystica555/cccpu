@@ -2,11 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 19.3 (HELP TEXT FIX)
+# SCRIPT 19.4 (OUTPUT CONTROL)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - The help text is now aligned into two neat columns for readability.
-# - Clarified the default behavior of the --cores flag.
+# - Adds --grid and --table flags to control output visibility.
 #
 # #############################################################################
 
@@ -38,12 +37,11 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.3${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.4${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
-    echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
+    echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
     
-    # Define options and descriptions for aligned output
     local -A options
     options["(no flags)"]="Displays the current status of all cores (default)."
     options["--on [<cores>]"]="Enables cores. Defaults to 'all' if no list is given."
@@ -54,11 +52,7 @@ function show_help() {
     options["-h, --help"]="Shows this help message."
     
     local max_len=0
-    for key in "${!options[@]}"; do
-        if (( ${#key} > max_len )); then
-            max_len=${#key}
-        fi
-    done
+    for key in "${!options[@]}"; do if (( ${#key} > max_len )); then max_len=${#key}; fi; done
 
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "(no flags)" "${options['(no flags)']}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--on [<cores>]" "${options['--on [<cores>]']}"
@@ -67,6 +61,10 @@ function show_help() {
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-b, --bias <name|list>" "${options['-b, --bias <name|list>']}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-c, --cores <cores>" "${options['-c, --cores <cores>']}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-h, --help" "${options['-h, --help']}"
+    
+    echo; echo -e "${C_BOLD}DISPLAY FLAGS:${C_RESET}"
+    echo -e "  ${C_SUCCESS}--grid${C_RESET}           Only displays the CPU Core Status grid."
+    echo -e "  ${C_SUCCESS}--table${C_RESET}          Only displays the Detailed Core Status table."
 
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
@@ -199,14 +197,15 @@ function show_status_table() {
 
 echo # Start with a blank line for separation
 
-# If no arguments are given, just show status and exit.
+ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
+ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0
+
+# If no arguments are given, default to showing everything
 if [ -z "$1" ]; then
     show_online_cores
     show_status_table
     exit 0
 fi
-
-ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""; ACTION_TAKEN=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -228,6 +227,8 @@ while [[ $# -gt 0 ]]; do
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires a core specification.${C_RESET}"; show_help; exit 1; fi
             CORES_FOR_POLICY_STR="$2"; shift 2
             ;;
+        --grid) SHOW_GRID_FLAG=1; shift 1 ;;
+        --table) SHOW_TABLE_FLAG=1; shift 1 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
@@ -243,5 +244,13 @@ if [[ -n "$GOVERNOR_TO_SET" || -n "$BIAS_TO_SET" ]]; then
     apply_power_policies "$GOVERNOR_TO_SET" "$BIAS_TO_SET" "$TARGET_LIST"
 fi
 
-if [ "$ACTION_TAKEN" -eq 1 ]; then show_online_cores; fi
-show_status_table
+# Determine what to show
+if (( SHOW_GRID_FLAG == 0 && SHOW_TABLE_FLAG == 0 )); then
+    # Default behavior: show both if an action was taken, or if no action (already handled)
+    show_online_cores
+    show_status_table
+else
+    # Explicit show flags were used
+    if (( SHOW_GRID_FLAG == 1 )); then show_online_cores; fi
+    if (( SHOW_TABLE_FLAG == 1 )); then show_status_table; fi
+fi
