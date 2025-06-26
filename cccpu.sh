@@ -2,12 +2,10 @@
 
 # #############################################################################
 #
-# SCRIPT 19.1 (PARSER FIX)
+# SCRIPT 19.2 (HELP TEXT FIX)
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes a critical bug where the script would hang if -g or -b were
-#   provided without a value.
-# - The argument parser is now more robust and integrated.
+# - The help text is now aligned into two neat columns for readability.
 #
 # #############################################################################
 
@@ -39,19 +37,39 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.1${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.2${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
-    echo -e "  ${C_SUCCESS}(no flags)${C_RESET}        Displays the current status of all cores (default)."
-    echo -e "  ${C_SUCCESS}--on [<cores>]${C_RESET}    Enables cores. Defaults to 'all' if no list is given."
-    echo -e "  ${C_SUCCESS}--off [<cores>]${C_RESET}   Disables cores. Defaults to all except core 0."
-    echo -e "  ${C_SUCCESS}-g, --governor <name|list>${C_RESET} Sets governor or lists available governors."
-    echo -e "  ${C_SUCCESS}-b, --bias <name|list>${C_RESET}      Sets bias or lists available biases."
-    echo -e "  ${C_SUCCESS}-c, --cores <cores>${C_RESET}   Specifies target cores for -g and -b flags."
-    echo -e "  ${C_SUCCESS}-h, --help${C_RESET}         Shows this help message."
+    
+    # Define options and descriptions for aligned output
+    local -A options
+    options["(no flags)"]="Displays the current status of all cores (default)."
+    options["--on [<cores>]"]="Enables cores. Defaults to 'all' if no list is given."
+    options["--off [<cores>]"]="Disables cores. Defaults to all except core 0."
+    options["-g, --governor <name|list>"]="Sets governor or lists available governors."
+    options["-b, --bias <name|list>"]="Sets bias or lists available biases."
+    options["-c, --cores <cores>"]="Specifies target cores for -g and -b flags."
+    options["-h, --help"]="Shows this help message."
+    
+    local max_len=0
+    for key in "${!options[@]}"; do
+        if (( ${#key} > max_len )); then
+            max_len=${#key}
+        fi
+    done
+
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "(no flags)" "${options['(no flags)']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--on [<cores>]" "${options['--on [<cores>]']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--off [<cores>]" "${options['--off [<cores>]']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-g, --governor <name|list>" "${options['-g, --governor <name|list>']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-b, --bias <name|list>" "${options['-b, --bias <name|list>']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-c, --cores <cores>" "${options['-c, --cores <cores>']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-h, --help" "${options['-h, --help']}"
+
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
+
 
 function parse_core_list() {
     local input_str=$1; local expanded_list=""
