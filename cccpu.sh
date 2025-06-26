@@ -2,10 +2,11 @@
 
 # #############################################################################
 #
-# SCRIPT 19.2 (HELP TEXT FIX)
+# SCRIPT 19.3 (HELP TEXT FIX)
 #
 # A modular command-line utility to view and manage CPU core status.
 # - The help text is now aligned into two neat columns for readability.
+# - Clarified the default behavior of the --cores flag.
 #
 # #############################################################################
 
@@ -37,7 +38,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.2${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.3${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -49,7 +50,7 @@ function show_help() {
     options["--off [<cores>]"]="Disables cores. Defaults to all except core 0."
     options["-g, --governor <name|list>"]="Sets governor or lists available governors."
     options["-b, --bias <name|list>"]="Sets bias or lists available biases."
-    options["-c, --cores <cores>"]="Specifies target cores for -g and -b flags."
+    options["-c, --cores <cores>"]="Target for -g/-b flags. Defaults to all online cores."
     options["-h, --help"]="Shows this help message."
     
     local max_len=0
