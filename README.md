@@ -1,16 +1,15 @@
 # cccpu
-CPU Core Control Power Utility
+CPU Core Control Power Utility v0.19.11
 ![image](https://github.com/user-attachments/assets/4a6111d8-ec2e-4a45-841b-4d0d7ab75c34)
 
-
-CPU Core Control Power Utility v0.19.11
   View and manage the status and power policies of CPU cores.
 
 USAGE:
   ./cccpu.sh [action_flags] [display_flags]
 
-ACTIONS (can be combined):
   (no flags)                  Displays the current status of all cores (default).
+
+ACTIONS (can be combined):
   --on [<cores>]              Enables cores. Defaults to 'all' if no list is given.
   --off [<cores>]             Disables cores. Defaults to all except core 0.
   -g, --governor <name|list>  Sets governor or lists available governors.
@@ -26,8 +25,14 @@ CORE SPECIFICATION <cores>:
   A list in the format: 1-3,7 or all
 
 
+The output is pretty easy to follow, and the online cores can be scripted
+as an enumerated space-separated list. It detects non-interactive and prints: 
+
 Verified online cores:
 0 1 2 3 4 5 6 7 8 9 10 11
+
+
+It also prints a B/W ascii table:
 
 +===================================================================+
 |                       Detailed Core Status                        |
