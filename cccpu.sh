@@ -2,11 +2,39 @@
 
 # #############################################################################
 #
-# SCRIPT 19.7 (DISPLAY FIX & FEATURES)
+# Copyright (c) 2025, Mystica Online Technologies, Lakewood Colorado 
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# #############################################################################
+#
+# CCCPU - CPUfreq Core Control & Power Utility v1.0.0
 #
 # A modular command-line utility to view and manage CPU core status.
-# - Fixes a bug where display flags were ignored without an action.
-# - Adds -G/--grid and -T/--table short options.
 #
 # #############################################################################
 
@@ -38,7 +66,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPU Core Control Utility v19.7${C_RESET}"
+    echo; echo -e "${C_TITLE}CPUfreq Core Control & Power Utility v1.0.0${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
@@ -210,7 +238,7 @@ echo # Start with a blank line for separation
 
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
-ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0
+ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0; LIST_GOV=0; LIST_BIAS=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -219,13 +247,13 @@ while [[ $# -gt 0 ]]; do
         -g|--governor)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'performance' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then list_available_policies "governor"; exit 0; fi
+            if [[ "$2" == "list" ]]; then LIST_GOV=1; shift 1; continue; fi
             GOVERNOR_TO_SET="$2"; shift 2
             ;;
         -b|--bias)
             ACTION_TAKEN=1
             if [[ -z "$2" || "$2" == -* ]]; then echo -e "${C_ERROR}Error: $1 requires an argument (e.g., 'powersave' or 'list').${C_RESET}"; show_help; exit 1; fi
-            if [[ "$2" == "list" ]]; then list_available_policies "bias"; exit 0; fi
+            if [[ "$2" == "list" ]]; then LIST_BIAS=1; shift 1; continue; fi
             BIAS_TO_SET="$2"; shift 2
             ;;
         -c|--cores)
@@ -239,6 +267,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if (( LIST_GOV == 1 )); then list_available_policies "governor"; fi
+if (( LIST_BIAS == 1 )); then list_available_policies "bias"; fi
 if [[ -n "$ON_CORES_STR" ]]; then
     cores_to_enable=$(parse_core_list "$ON_CORES_STR"); set_core_state 1 "$cores_to_enable"
     if [[ -z "$GOVERNOR_TO_SET" && -z "$BIAS_TO_SET" ]]; then apply_default_policies "$cores_to_enable"; fi
