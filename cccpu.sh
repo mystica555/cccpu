@@ -32,7 +32,7 @@
 #
 # #############################################################################
 #
-# CCCPU - CPUfreq Core Control & Power Utility v1.0.0
+# CCCPU - CPUfreq Core Control & Power Utility v0.19.10
 #
 # A modular command-line utility to view and manage CPU core status.
 #
