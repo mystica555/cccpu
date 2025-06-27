@@ -32,7 +32,7 @@
 #
 # #############################################################################
 #
-# CCCPU - CPUfreq Core Control & Power Utility v0.19.10
+# CCCPU - CPU Core Control & Power Utility v0.19.10
 #
 # A modular command-line utility to view and manage CPU core status.
 #
@@ -66,7 +66,7 @@ function draw_line() {
 # =============================================================================
 
 function show_help() {
-    echo; echo -e "${C_TITLE}CPUfreq Core Control & Power Utility v1.0.0${C_RESET}"
+    echo; echo -e "${C_TITLE}CPU Core Control Power Utility v0.19.10${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
     echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
