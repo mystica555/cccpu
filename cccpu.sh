@@ -185,8 +185,8 @@ function show_online_cores() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
         local TITLE="CPU Core Status"
         draw_line "$C_EQUAL" "="
-        local PAD_LEN=$(( (TABLE_WIDTH - ${#TITLE}) / 2 ))
-        printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
+        local PAD_LEN=$(( (TABLE_WIDTH - 4 - ${#TITLE}) / 2 ))
+        printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - ${#TITLE} - 2 - PAD_LEN))" ""
         draw_line "$C_DASH" "-"
         local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
         local online_cores=" $(get_enumerated_online_cpus) "
