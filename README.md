@@ -9,7 +9,7 @@
   
 
 ## USAGE:
-    ./cccpu.sh [action_flags] [display_flags]
+    cccpu.sh [action_flags] [display_flags]
 ###  No Flags:                   Displays the current status of all cores (default).
 
 ## ACTION FLAGS (can be combined):
