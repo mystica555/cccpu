@@ -4,7 +4,9 @@
 
 ### View and manage the status and power policies of CPU cores.
 ![image](https://github.com/user-attachments/assets/054bbd46-9df2-4e50-aa8b-063a8cce94a9)
+### Finally some XTerm-256 goodness! 
 
+  
 
 ## USAGE:
     ./cccpu.sh [action_flags] [display_flags]
@@ -53,7 +55,3 @@ The output is pretty easy to follow, and the online cores can be scripted as an 
     |   Core 11  |   ONLINE   |   powersave   |       performance       |
     +===================================================================+
 
-
-## Finally some XTerm-256 goodness! 
-
-  
