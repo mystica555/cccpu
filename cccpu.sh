@@ -69,7 +69,6 @@ function show_help() {
     echo; echo -e "${C_TITLE}CPU Core Control Power Utility${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
-    echo; echo -e "${C_BOLD}ACTION FLAGS (can be combined):${C_RESET}"
     
     local -A options
     options["No Flags:"]="Displays the current status of all cores (default)."
@@ -82,8 +81,9 @@ function show_help() {
     
     local max_len=0
     for key in "${!options[@]}"; do if (( ${#key} > max_len )); then max_len=${#key}; fi; done
-
+    echo;
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "No Flags:" "${options['No Flags:']}"
+    echo; echo -e "${C_BOLD}ACTION FLAGS (can be combined):${C_RESET}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--on           [<cores>]  " "${options['--on [<cores>]']}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--off          [<cores>]  " "${options['--off [<cores>]']}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-g, --governor <name|list>" "${options['-g, --governor <name|list>']}"
