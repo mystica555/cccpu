@@ -3,7 +3,7 @@
 ![image](https://github.com/user-attachments/assets/4a6111d8-ec2e-4a45-841b-4d0d7ab75c34)
 
 ### View and manage the status and power policies of CPU cores.
-![image](https://github.com/user-attachments/assets/8d92f531-7665-4532-ae78-d8ade2805f17)
+![image](https://github.com/user-attachments/assets/054bbd46-9df2-4e50-aa8b-063a8cce94a9)
 
 
 ## USAGE:
