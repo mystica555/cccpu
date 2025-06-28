@@ -69,10 +69,10 @@ function show_help() {
     echo; echo -e "${C_TITLE}CPU Core Control Power Utility v0.19.11${C_RESET}"
     echo -e "  View and manage the status and power policies of CPU cores."
     echo; echo -e "${C_BOLD}USAGE:${C_RESET}"; echo -e "  $0 [action_flags] [display_flags]"
-    echo; echo -e "${C_BOLD}ACTIONS (can be combined):${C_RESET}"
+    echo; echo -e "${C_BOLD}ACTION FLAGS (can be combined):${C_RESET}"
     
     local -A options
-    options["(no flags)"]="Displays the current status of all cores (default)."
+    options["No Flags:"]="Displays the current status of all cores (default)."
     options["--on [<cores>]"]="Enables cores. Defaults to 'all' if no list is given."
     options["--off [<cores>]"]="Disables cores. Defaults to all except core 0."
     options["-g, --governor <name|list>"]="Sets governor or lists available governors."
@@ -83,13 +83,13 @@ function show_help() {
     local max_len=0
     for key in "${!options[@]}"; do if (( ${#key} > max_len )); then max_len=${#key}; fi; done
 
-    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "(no flags)" "${options['(no flags)']}"
-    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--on [<cores>]" "${options['--on [<cores>]']}"
-    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--off [<cores>]" "${options['--off [<cores>]']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "No Flags:" "${options['No Flags:']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--on           [<cores>]  " "${options['--on [<cores>]']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--off          [<cores>]  " "${options['--off [<cores>]']}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-g, --governor <name|list>" "${options['-g, --governor <name|list>']}"
-    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-b, --bias <name|list>" "${options['-b, --bias <name|list>']}"
-    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-c, --cores <cores>" "${options['-c, --cores <cores>']}"
-    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-h, --help" "${options['-h, --help']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-b, --bias     <name|list>" "${options['-b, --bias <name|list>']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-c, --cores    <cores>    " "${options['-c, --cores <cores>']}"
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-h, --help                " "${options['-h, --help']}"
     
     echo; echo -e "${C_BOLD}DISPLAY FLAGS:${C_RESET}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-G, --grid" "Only displays the CPU Core Status grid."
