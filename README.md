@@ -8,8 +8,9 @@
 
 ## USAGE:
     ./cccpu.sh [action_flags] [display_flags]
-## ACTION FLAGS (can be combined):
 ###  No Flags:                   Displays the current status of all cores (default).
+
+## ACTION FLAGS (can be combined):
     --on            [<cores>]    Enables cores. Defaults to 'all' if no list is given.
     --off           [<cores>]    Disables cores. Defaults to all except core 0.
     -g, --governor  <name|list>  Sets governor or lists available governors.
