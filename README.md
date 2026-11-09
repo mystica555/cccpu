@@ -23,6 +23,11 @@
 ## DISPLAY FLAGS:
     -G, --grid                   Only displays the CPU Core Status grid.
     -T, --table                  Only displays the Detailed Core Status table.
+    --unicode                    Uses single-line Unicode box drawing instead of ASCII.
+
+Box drawing characters are East-Asian "ambiguous" width, so whether they fit the
+frame depends on your terminal font. ASCII is the default and lines up everywhere;
+use --unicode if your terminal draws the single-line set at one column.
 
 ## CORE SPECIFICATION <cores>:
     A list in the format: 1-3,7 or all
@@ -34,24 +39,24 @@ The output is pretty easy to follow, and the online cores can be scripted as an 
     0 1 2 3 4 5 6 7 8 9 10 11
 
 
-## It also prints a B/W ascii table:
+## It also prints a B/W table:
 
     +===================================================================+
     |                       Detailed Core Status                        |
-    +===================================================================+
-    |    NODE    |   STATUS   |   GOVERNOR    |          BIAS           |
-    +-------------------------------------------------------------------+
-    |   Core 0   |   ONLINE   |   powersave   |   balance_performance   |
-    |   Core 1   |   ONLINE   |   powersave   |   balance_performance   |
-    |   Core 2   |   ONLINE   |   powersave   |   balance_performance   |
-    |   Core 3   |   ONLINE   |   powersave   |   balance_performance   |
-    |   Core 4   |   ONLINE   |   powersave   |       performance       |
-    |   Core 5   |   ONLINE   |   powersave   |       performance       |
-    |   Core 6   |   ONLINE   |   powersave   |       performance       |
-    |   Core 7   |   ONLINE   |   powersave   |       performance       |
-    |   Core 8   |   ONLINE   |   powersave   |       performance       |
-    |   Core 9   |   ONLINE   |   powersave   |       performance       |
-    |   Core 10  |   ONLINE   |   powersave   |       performance       |
-    |   Core 11  |   ONLINE   |   powersave   |       performance       |
-    +===================================================================+
+    +============+===========+================+=========================+
+    |    NODE    |  STATUS   |    GOVERNOR    |          BIAS           |
+    +============+===========+================+=========================+
+    |   Core 0   |  ONLINE   |   powersave    |   balance_performance   |
+    |   Core 1   |  ONLINE   |   powersave    |   balance_performance   |
+    |   Core 2   |  ONLINE   |   powersave    |   balance_performance   |
+    |   Core 3   |  ONLINE   |   powersave    |   balance_performance   |
+    |   Core 4   |  ONLINE   |   powersave    |       performance       |
+    |   Core 5   |  ONLINE   |   powersave    |       performance       |
+    |   Core 6   |  ONLINE   |   powersave    |       performance       |
+    |   Core 7   |  ONLINE   |   powersave    |       performance       |
+    |   Core 8   |  ONLINE   |   powersave    |       performance       |
+    |   Core 9   |  ONLINE   |   powersave    |       performance       |
+    |  Core 10   |  ONLINE   |   powersave    |       performance       |
+    |  Core 11   |  ONLINE   |   powersave    |       performance       |
+    +============+===========+================+=========================+
 

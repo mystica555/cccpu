@@ -39,26 +39,91 @@
 # #############################################################################
 
 # --- xterm-256color Custom Theme Definitions ---
+COLOR_VARS='C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_YELLOW C_FRAME'
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  C_RESET='\e[0m'; C_BOLD='\e[1m'
-  C_TITLE='\e[1;38;5;228m'; C_HEADER='\e[1;38;5;39m'; C_CORE='\e[38;5;228m'
-  C_STATUS_ON='\e[38;5;154m'; C_STATUS_OFF='\e[38;5;196m'; C_GOV='\e[38;5;141m'
-  C_EPP='\e[38;5;161m'; C_INFO='\e[38;5;244m'; C_SUCCESS='\e[38;5;46m'; C_ERROR='\e[1;38;5;196m'
-  C_PLUS='\e[38;5;47m'; C_PIPE='\e[38;5;41m'; C_DASH='\e[38;5;28m'; C_EQUAL='\e[38;5;22m'
+  # Real ESC bytes (ANSI-C quoting) so the colors print correctly through %s.
+  C_RESET=$'\e[0m'; C_BOLD=$'\e[1m'
+  C_TITLE=$'\e[1;38;5;228m'; C_HEADER=$'\e[1;38;5;39m'; C_CORE=$'\e[38;5;228m'
+  C_STATUS_ON=$'\e[38;5;154m'; C_STATUS_OFF=$'\e[38;5;196m'; C_GOV=$'\e[38;5;141m'
+  C_EPP=$'\e[38;5;161m'; C_INFO=$'\e[38;5;244m'; C_SUCCESS=$'\e[38;5;46m'; C_ERROR=$'\e[1;38;5;196m'
+  C_YELLOW=$'\e[1;38;5;228m'; C_FRAME=$'\e[38;5;45m'
 else
-  for v in C_RESET C_BOLD C_TITLE C_HEADER C_CORE C_STATUS_ON C_STATUS_OFF C_GOV C_EPP C_INFO C_SUCCESS C_ERROR C_PLUS C_PIPE C_DASH C_EQUAL; do eval "$v=''"; done
+  for v in $COLOR_VARS; do eval "$v=''"; done
 fi
 
 # =============================================================================
 # --- GLOBAL HELPERS & DEFINITIONS ---
 # =============================================================================
 
-# Define EXACT table width from final mock-up
-TABLE_WIDTH=69
+# Column content widths. Every cell gets one space of padding on each side.
+COL_NODE=10; COL_STATUS=9; COL_GOV=14; COL_BIAS=23
 
-# Helper function to draw a multi-colored line
-function draw_line() {
-    printf "${C_PLUS}+"; for ((i=1; i<TABLE_WIDTH-1; i++)); do printf "${1}%s" "$2"; done; printf "${C_PLUS}+\n${C_RESET}";
+# Derived geometry: four cells + three inner dividers + the two outer walls.
+# Rules, titles and rows all use these values, so they can never drift apart.
+TABLE_WIDTH=$(( (COL_NODE+2) + (COL_STATUS+2) + (COL_GOV+2) + (COL_BIAS+2) + 3 + 2 ))
+TABLE_INNER=$(( TABLE_WIDTH - 2 ))
+
+# Frame glyphs. ASCII is the default because every box-drawing character is
+# East-Asian "Ambiguous" width: a terminal whose font fallback supplies it may
+# draw it two columns wide, which doubles the rules and breaks the frame.
+# --unicode selects the single-line box set for terminals that draw it at one
+# column; single-line is much more widely covered than the double-line set.
+G_TL='+'; G_TR='+'; G_BL='+'; G_BR='+'
+G_H='=';  G_V='|';  G_VL='|'
+G_LT='+'; G_RT='+'; G_TT='+'; G_BT='+'; G_CT='+'
+G_ON='#'; G_OFF='.'
+
+# Swap the frame and status markers to their single-line Unicode equivalents.
+function set_box_style() {
+    [[ ${1:-} == "unicode" ]] || return 0
+    G_TL='┌'; G_TR='┐'; G_BL='└'; G_BR='┘'
+    G_H='─';  G_V='│';  G_VL='│'
+    G_LT='├'; G_RT='┤'; G_TT='┬'; G_BT='┴'; G_CT='┼'
+    G_ON='■'; G_OFF='□'
+}
+
+# Echo glyph $1 repeated $2 times as plain text.
+function _rep() { local out; printf -v out '%*s' "$2" ''; printf '%s' "${out// /$1}"; }
+
+# Echo text centered in exactly $1 columns (truncated when it is too long).
+function _center() {
+    local w=$1 text=${2:0:$1} pad_l
+    pad_l=$(( (w - ${#text}) / 2 )); (( pad_l < 0 )) && pad_l=0
+    printf '%*s%s%*s' "$pad_l" '' "$text" "$(( w - ${#text} - pad_l ))" ''
+}
+
+# Horizontal rule: left cap, run glyph, junction glyph, right cap, segment widths.
+function draw_rule() {
+    local left=$1 run=$2 join=$3 right=$4 out first=1 width; shift 4
+    (( $# )) || set -- "$TABLE_INNER"
+    out="${C_FRAME}${left}${C_RESET}"
+    for width in "$@"; do
+        (( first )) || out+="${C_FRAME}${join}${C_RESET}"
+        out+="${C_FRAME}$(_rep "$run" "$width")${C_RESET}"
+        first=0
+    done
+    printf '%s%s%s%s\n' "$out" "$C_FRAME" "$right" "$C_RESET"
+}
+
+# Title row: the title centered between the two outer walls.
+function draw_title() {
+    local title=$1 pad_l pad_r
+    pad_l=$(( (TABLE_INNER - ${#title}) / 2 )); pad_r=$(( TABLE_INNER - ${#title} - pad_l ))
+    printf '%s%s%s%*s%s%s%s%*s%s%s%s\n' \
+        "$C_FRAME" "$G_V" "$C_RESET" "$pad_l" '' "$C_TITLE" "$title" "$C_RESET" "$pad_r" '' "$C_FRAME" "$G_V" "$C_RESET"
+}
+
+# Content row built from (color, text) pairs; text must already fill its column.
+function draw_row() {
+    local color text first=1
+    printf '%s%s%s' "$C_FRAME" "$G_V" "$C_RESET"
+    while (( $# >= 2 )); do
+        color=$1 text=$2; shift 2
+        (( first )) || printf '%s%s%s' "$C_FRAME" "$G_VL" "$C_RESET"
+        printf ' %s%s%s ' "$color" "$text" "$C_RESET"
+        first=0
+    done
+    printf '%s%s%s\n' "$C_FRAME" "$G_V" "$C_RESET"
 }
 
 # =============================================================================
@@ -94,6 +159,7 @@ function show_help() {
     echo; echo -e "${C_BOLD}DISPLAY FLAGS:${C_RESET}"
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-G, --grid" "Only displays the CPU Core Status grid."
     printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "-T, --table" "Only displays the Detailed Core Status table."
+    printf "  ${C_SUCCESS}%-*s${C_RESET}  %s\n" "$max_len" "--unicode" "Uses single-line Unicode box drawing instead of ASCII."
 
     echo; echo -e "${C_BOLD}CORE SPECIFICATION <cores>:${C_RESET}"; echo -e "  A list in the format: ${C_YELLOW}1-3,7${C_RESET} or ${C_YELLOW}all${C_RESET}"; echo
 }
@@ -182,52 +248,96 @@ function apply_power_policies() {
 }
 
 function show_online_cores() {
-    if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-        local TITLE="CPU Core Status"
-        draw_line "$C_EQUAL" "="
-        local PAD_LEN=$(( (TABLE_WIDTH - 4 - ${#TITLE}) / 2 ))
-        printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
-        draw_line "$C_DASH" "-"
-        local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
-        local online_cores=" $(get_enumerated_online_cpus) "
-        local item_width=5; local grid_width=$(( ${#all_cores[@]} * item_width ))
-        local grid_pad=$(( (TABLE_WIDTH - grid_width) / 2 ))
-        printf "${C_PIPE}|%*s" "$grid_pad" ""
-        local grid_content=""; for i in "${all_cores[@]}"; do if [[ $online_cores == *" $i "* ]]; then grid_content+=$(printf "${C_STATUS_ON}■ %-3s${C_RESET}" "$i"); else grid_content+=$(printf "${C_STATUS_OFF}■ %-3s${C_RESET}" "$i"); fi; done
-        printf "%b" "$grid_content"
-        printf "%*s${C_PIPE}|\n" "$((TABLE_WIDTH - 2 - grid_width - grid_pad))" ""
-        draw_line "$C_EQUAL" "="; echo ""
-    else
+    if ! { [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; }; then
         local online_cores_text; online_cores_text=$(get_enumerated_online_cpus)
         echo "Verified online cores:"; echo "${online_cores_text}"; echo ""
+        return 0
     fi
+
+    local TITLE="CPU Core Status"
+    local -a all_cores; mapfile -t all_cores < <(ls -d /sys/devices/system/cpu/cpu[0-9]* 2>/dev/null | sed 's|.*/cpu||' | sort -n)
+    local online_cores=" $(get_enumerated_online_cpus) "
+    local total=${#all_cores[@]} digits=1 core unit cell
+
+    for core in "${all_cores[@]}"; do (( ${#core} > digits )) && digits=${#core}; done
+    unit=$(( 3 + digits ))                       # "■ " + number + trailing space
+    local per_line=$(( TABLE_INNER / unit )); (( per_line < 1 )) && per_line=1
+
+    draw_rule "$G_TL" "$G_H" '' "$G_TR"
+    draw_title "$TITLE"
+    draw_rule "$G_LT" "$G_H" '' "$G_RT"
+
+    local start end i line_width pad_l pad_r
+    local -a cells
+    for (( start = 0; start < total; start += per_line )); do
+        end=$(( start + per_line )); (( end > total )) && end=$total
+        cells=()
+        for (( i = start; i < end; i++ )); do
+            core=${all_cores[i]}
+            if [[ $online_cores == *" $core "* ]]; then
+                printf -v cell '%s %*s ' "$G_ON" "$digits" "$core"; cells+=("${C_STATUS_ON}${cell}${C_RESET}")
+            else
+                printf -v cell '%s %*s ' "$G_OFF" "$digits" "$core"; cells+=("${C_STATUS_OFF}${cell}${C_RESET}")
+            fi
+        done
+        line_width=$(( ${#cells[@]} * unit ))
+        pad_l=$(( (TABLE_INNER - line_width) / 2 )); (( pad_l < 0 )) && pad_l=0
+        pad_r=$(( TABLE_INNER - line_width - pad_l ))
+        printf '%s%s%s%*s' "$C_FRAME" "$G_V" "$C_RESET" "$pad_l" ''
+        printf '%s' "${cells[@]}"
+        printf '%*s%s%s%s\n' "$pad_r" '' "$C_FRAME" "$G_V" "$C_RESET"
+    done
+
+    # Legend: what the square colors mean plus an online/total count, centered.
+    local key_on=' online' key_off=' offline' legend online_count=0
+    for core in "${all_cores[@]}"; do [[ $online_cores == *" $core "* ]] && online_count=$(( online_count + 1 )); done
+    local count_text="${online_count}/${total} online"
+    local legend_width=$(( 1 + ${#key_on} + 3 + 1 + ${#key_off} + 3 + ${#count_text} ))   # each square is one column
+    printf -v legend '%s%s%s%s   %s%s%s%s   %s' "$C_STATUS_ON" "$G_ON" "$C_RESET" "$key_on" "$C_STATUS_OFF" "$G_OFF" "$C_RESET" "$key_off" "$count_text"
+    draw_rule "$G_LT" "$G_H" '' "$G_RT"
+    pad_l=$(( (TABLE_INNER - legend_width) / 2 )); (( pad_l < 0 )) && pad_l=0
+    pad_r=$(( TABLE_INNER - legend_width - pad_l ))
+    printf '%s%s%s%*s%s%*s%s%s%s\n' "$C_FRAME" "$G_V" "$C_RESET" "$pad_l" '' "$legend" "$pad_r" '' "$C_FRAME" "$G_V" "$C_RESET"
+
+    draw_rule "$G_BL" "$G_H" '' "$G_BR"
+    echo ""
 }
 
 function show_status_table() {
-    local W_NODE=10; local W_STATUS=10; local W_GOV=13; local W_BIAS=27
-    function _get_centered() { local width=$1 text=$2; local pad_l=$(( (width - ${#text}) / 2 )); local pad_r=$((width - ${#text} - pad_l)); printf "%*s%s%*s" "$pad_l" "" "$text" "$pad_r"; }
-    function _get_node() { local width=$1 text=$2; local num=${text##* }; local str; str=$(printf "Core %s" "$num"); local pad_l=2; local pad_r=$((width - ${#str} - pad_l)); printf "%*s%s%*s" "$pad_l" "" "$str" "$pad_r"; }
-    function _get_centered_bias() { local width=$1 text=$2; local pad_l=$(( (width - ${#text}) / 2 - 2)); local pad_r=$((width - ${#text} - pad_l - 4)); printf "%*s%s%*s" "$pad_l" "" "$text" "$pad_r"; }
     local TITLE="Detailed Core Status"
-    local PAD_LEN=$(( (TABLE_WIDTH - 2 - ${#TITLE}) / 2 ))
-    draw_line "$C_EQUAL" "="; printf "${C_PIPE}|%*s${C_TITLE}%s${C_RESET}%*s${C_PIPE}|\n" "$PAD_LEN" "" "$TITLE" "$((TABLE_WIDTH - 2 - ${#TITLE} - PAD_LEN))" ""
-    draw_line "$C_EQUAL" "="
-    local h_node;   h_node=$(_get_centered "$W_NODE" "NODE"); local h_status; h_status=$(_get_centered "$W_STATUS" "STATUS"); local h_gov;    h_gov=$(_get_centered "$W_GOV" "GOVERNOR"); local h_bias;   h_bias=$(_get_centered_bias "$W_BIAS" "BIAS")
-    printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_node"; printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_status"; printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_gov"; printf "${C_PIPE}|"; printf " ${C_HEADER}%s${C_RESET} " "$h_bias"; printf "${C_PIPE}|\n"
-    draw_line "$C_DASH" "-"
-    local all_cores=($(ls -d /sys/devices/system/cpu/cpu[0-9]* | sed 's|.*/cpu||' | sort -n))
+    local c_node=$(( COL_NODE + 2 )) c_status=$(( COL_STATUS + 2 )) c_gov=$(( COL_GOV + 2 )) c_bias=$(( COL_BIAS + 2 ))
+    local -a all_cores; mapfile -t all_cores < <(ls -d /sys/devices/system/cpu/cpu[0-9]* 2>/dev/null | sed 's|.*/cpu||' | sort -n)
+
+    draw_rule "$G_TL" "$G_H" '' "$G_TR"
+    draw_title "$TITLE"
+    draw_rule "$G_LT" "$G_H" "$G_TT" "$G_RT" "$c_node" "$c_status" "$c_gov" "$c_bias"
+    draw_row "$C_HEADER" "$(_center "$COL_NODE" "NODE")" \
+             "$C_HEADER" "$(_center "$COL_STATUS" "STATUS")" \
+             "$C_HEADER" "$(_center "$COL_GOV" "GOVERNOR")" \
+             "$C_HEADER" "$(_center "$COL_BIAS" "BIAS")"
+    draw_rule "$G_LT" "$G_H" "$G_CT" "$G_RT" "$c_node" "$c_status" "$c_gov" "$c_bias"
+
+    local i ONLINE_STATUS GOV EPP_VAL STATUS_COLOR GOV_COLOR EPP_COLOR ONLINE_FILE GOV_FILE EPP_FILE
     for i in "${all_cores[@]}"; do
-        local ONLINE_STATUS="OFFLINE" GOV="<no_signal>" EPP_VAL="<no_signal>" STATUS_COLOR="${C_STATUS_OFF}"; local GOV_COLOR="${C_GOV}" EPP_COLOR="${C_EPP}"
-        local ONLINE_FILE="/sys/devices/system/cpu/cpu${i}/online"
-        if [ "$i" -eq 0 ] || ( [ -f "$ONLINE_FILE" ] && [ "$(cat "$ONLINE_FILE")" -eq 1 ] ); then
-            ONLINE_STATUS="ONLINE"; STATUS_COLOR="${C_STATUS_ON}"; local GOV_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"; local EPP_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
-            if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi; if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
+        ONLINE_STATUS="OFFLINE"; GOV="<no_signal>"; EPP_VAL="<no_signal>"
+        STATUS_COLOR="${C_STATUS_OFF}"; GOV_COLOR="${C_GOV}"; EPP_COLOR="${C_EPP}"
+        ONLINE_FILE="/sys/devices/system/cpu/cpu${i}/online"
+        if [ "$i" -eq 0 ] || { [ -f "$ONLINE_FILE" ] && [ "$(cat "$ONLINE_FILE")" -eq 1 ]; }; then
+            ONLINE_STATUS="ONLINE"; STATUS_COLOR="${C_STATUS_ON}"
+            GOV_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor"
+            EPP_FILE="/sys/devices/system/cpu/cpu${i}/cpufreq/energy_performance_preference"
+            if [ -f "$GOV_FILE" ]; then GOV=$(cat "$GOV_FILE"); fi
+            if [ -f "$EPP_FILE" ]; then EPP_VAL=$(cat "$EPP_FILE"); fi
         fi
-        if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi; if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
-        local d_node;   d_node=$(_get_node "$W_NODE" "Core $i"); local d_status; d_status=$(_get_centered "$W_STATUS" "$ONLINE_STATUS"); local d_gov;    d_gov=$(_get_centered "$W_GOV" "$GOV"); local d_bias;   d_bias=$(_get_centered_bias "$W_BIAS" "$EPP_VAL")
-        printf "${C_PIPE}|"; printf " ${C_CORE}%s${C_RESET} " "$d_node"; printf "${C_PIPE}|"; printf " ${STATUS_COLOR}%s${C_RESET} " "$d_status"; printf "${C_PIPE}|"; printf " ${GOV_COLOR}%s${C_RESET} " "$d_gov"; printf "${C_PIPE}|"; printf " ${EPP_COLOR}%s${C_RESET} " "$d_bias"; printf "${C_PIPE}|\n"
+        if [[ "$GOV" == "<no_signal>" ]]; then GOV_COLOR="${C_STATUS_OFF}"; fi
+        if [[ "$EPP_VAL" == "<no_signal>" ]]; then EPP_COLOR="${C_STATUS_OFF}"; fi
+        draw_row "$C_CORE" "$(_center "$COL_NODE" "Core $i")" \
+                 "$STATUS_COLOR" "$(_center "$COL_STATUS" "$ONLINE_STATUS")" \
+                 "$GOV_COLOR" "$(_center "$COL_GOV" "$GOV")" \
+                 "$EPP_COLOR" "$(_center "$COL_BIAS" "$EPP_VAL")"
     done
-    draw_line "$C_EQUAL" "=";
+    draw_rule "$G_BL" "$G_H" "$G_BT" "$G_BR" "$c_node" "$c_status" "$c_gov" "$c_bias"
+    echo ""
 }
 
 # =============================================================================
@@ -238,7 +348,7 @@ echo # Start with a blank line for separation
 
 if [ -z "$1" ]; then show_online_cores; show_status_table; exit 0; fi
 ON_CORES_STR=""; OFF_CORES_STR=""; GOVERNOR_TO_SET=""; BIAS_TO_SET=""; CORES_FOR_POLICY_STR=""
-ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0
+ACTION_TAKEN=0; SHOW_GRID_FLAG=0; SHOW_TABLE_FLAG=0; STYLE_ONLY=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -262,6 +372,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -G|--grid) SHOW_GRID_FLAG=1; shift 1 ;;
         -T|--table) SHOW_TABLE_FLAG=1; shift 1 ;;
+        --unicode) set_box_style unicode; STYLE_ONLY=1; shift 1 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo -e "${C_ERROR}Error: Unknown option '$1'${C_RESET}"; show_help; exit 1 ;;
     esac
@@ -281,7 +392,7 @@ fi
 if (( SHOW_GRID_FLAG == 1 || SHOW_TABLE_FLAG == 1 )); then
     if (( SHOW_GRID_FLAG == 1 )); then show_online_cores; fi
     if (( SHOW_TABLE_FLAG == 1 )); then show_status_table; fi
-elif [ "$ACTION_TAKEN" -eq 1 ]; then
+elif [ "$ACTION_TAKEN" -eq 1 ] || [ "$STYLE_ONLY" -eq 1 ]; then
     show_online_cores
     show_status_table
 fi
