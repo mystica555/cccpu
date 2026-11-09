@@ -60,3 +60,10 @@ The output is pretty easy to follow, and the online cores can be scripted as an 
     |  Core 11   |  ONLINE   |   powersave    |       performance       |
     +============+===========+================+=========================+
 
+## SELF-TEST:
+
+    tests/box-width.sh
+
+Drives the drawing functions with a fixed set of fake cores and fails if any box
+line is not 69 columns wide. Requires `script` from util-linux to give the grid a pty.
+
